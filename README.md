@@ -50,16 +50,15 @@ Nested `aatomic` blocks create savepoints. Cross-task transaction reuse is detec
 
 ## Model Support
 
-Subclass `Model` to get the async ORM with a single base class. The default `objects` manager exposes both Django's sync API and our async API on the same QuerySet.
+Subclass `Model` to get the async ORM with a single base class. The default `objects` manager is wired up automatically and exposes both Django's sync API and our async API on the same QuerySet.
 
 ```python
 from django.db import models
 
-from django_async_backend.db.models import Model, Manager
+from django_async_backend.db.models import Model
 
 class MyModel(Model):
     name = models.CharField(max_length=100)
-    objects = Manager()
 ```
 
 Then:
@@ -95,13 +94,13 @@ enable_async_globally()
 
 ### Legacy mixin
 
-The `AsyncModel` mixin and `AsyncManager` alias still work for code written before the unified API:
+The `AsyncModelMixin` mixin and `AsyncManager` alias still work for code written before the unified API:
 
 ```python
-from django_async_backend.db.models.base import AsyncModel
+from django_async_backend.db.models.base import AsyncModelMixin
 from django_async_backend.db.models.manager import AsyncManager
 
-class MyModel(AsyncModel, models.Model):
+class MyModel(AsyncModelMixin, models.Model):
     name = models.CharField(max_length=100)
     async_object = AsyncManager()
 ```
@@ -138,7 +137,7 @@ class MyModel(AsyncModel, models.Model):
 
 ### Related Manager Methods
 
-Reverse FK and M2M managers on `AsyncModel` subclasses automatically get async methods:
+Reverse FK and M2M managers on `AsyncModelMixin` subclasses automatically get async methods:
 
 | Method | Reverse FK | M2M | Notes |
 |--------|-----------|-----|-------|

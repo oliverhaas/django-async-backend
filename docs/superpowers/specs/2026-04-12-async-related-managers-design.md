@@ -1,6 +1,6 @@
 # Async Related Managers
 
-Add `aadd`, `aremove`, `aclear`, `aset`, `acreate`, `aget_or_create`, `aupdate_or_create` to Django's reverse-FK and M2M managers for AsyncModel subclasses.
+Add `aadd`, `aremove`, `aclear`, `aset`, `acreate`, `aget_or_create`, `aupdate_or_create` to Django's reverse-FK and M2M managers for AsyncModelMixin subclasses.
 
 ## Problem
 
@@ -21,7 +21,7 @@ Contains:
 
 ### Hook: `class_prepared` signal
 
-Extend the existing `class_prepared` handler in `base.py`. For each `AsyncModel` subclass, iterate `sender._meta.get_fields()`:
+Extend the existing `class_prepared` handler in `base.py`. For each `AsyncModelMixin` subclass, iterate `sender._meta.get_fields()`:
 
 - For `one_to_many` fields (reverse FK): get the descriptor from the model, replace its `related_manager_cls` cached property with our factory's output.
 - For `many_to_many` fields: same treatment.

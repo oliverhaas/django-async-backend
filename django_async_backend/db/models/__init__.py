@@ -1,4 +1,4 @@
-from django_async_backend.db.models.base import AsyncModel, Model
+from django_async_backend.db.models.base import AsyncModelMixin, Model
 from django_async_backend.db.models.manager import (
     AsyncManager,
     Manager,
@@ -9,7 +9,7 @@ from django_async_backend.db.models.query import QuerySet
 
 __all__ = [
     "AsyncManager",
-    "AsyncModel",
+    "AsyncModelMixin",
     "Manager",
     "Model",
     "QuerySet",

@@ -9,9 +9,9 @@ Usage (preferred):
 
 Usage (legacy mixin, still supported):
     from django.db import models
-    from django_async_backend.db.models.base import AsyncModel
+    from django_async_backend.db.models.base import AsyncModelMixin
 
-    class MyModel(AsyncModel, models.Model):
+    class MyModel(AsyncModelMixin, models.Model):
         name = models.CharField(max_length=100)
 
 Signals:
@@ -35,7 +35,7 @@ from django_async_backend.db.transaction import (
 
 def _register_async_date_accessors(sender, **kwargs):
     """Attach aget_next_by_FOO / aget_previous_by_FOO for each non-null date field."""
-    if not issubclass(sender, AsyncModel):
+    if not issubclass(sender, AsyncModelMixin):
         return
     for field in sender._meta.local_fields:
         if isinstance(field, (DateField, DateTimeField)) and not field.null:
@@ -54,12 +54,12 @@ def _register_async_date_accessors(sender, **kwargs):
 class_prepared.connect(_register_async_date_accessors)
 
 
-class AsyncModel:
+class AsyncModelMixin:
     """Mixin that adds truly async asave() and adelete() to Django models.
 
     Prefer subclassing Model (which combines this mixin with django.db.models.Model)
     for new code. This mixin remains for legacy use with explicit
-    multiple inheritance: class MyModel(AsyncModel, models.Model).
+    multiple inheritance: class MyModel(AsyncModelMixin, models.Model).
     """
 
     def __init_subclass__(cls, async_mro_strict=True, **kwargs):
@@ -67,7 +67,7 @@ class AsyncModel:
         if not async_mro_strict:
             return
         for klass in cls.__mro__:
-            if klass is AsyncModel:
+            if klass is AsyncModelMixin:
                 break
             if "save" in klass.__dict__ and "asave" not in klass.__dict__:
                 raise TypeError(
@@ -482,16 +482,26 @@ class AsyncModel:
         self._state.db = db_instance._state.db
 
 
-class Model(AsyncModel, django.db.models.Model):
+class Model(AsyncModelMixin, django.db.models.Model):
     """Base class for async-backend models.
 
     Subclass this for new code:
         class MyModel(Model):
             name = models.CharField(max_length=100)
 
-    Inherits AsyncModel (asave/adelete/arefresh_from_db/aget_next_by_FIELD)
-    and django.db.models.Model in a single declaration.
+    Inherits AsyncModelMixin (asave/adelete/arefresh_from_db/aget_next_by_FIELD)
+    and django.db.models.Model in a single declaration. The default
+    `objects` manager exposes both Django's sync API and our async API on
+    the same QuerySet, so no `async_object = Manager()` boilerplate is
+    needed on subclasses.
     """
+
+    # Import here to avoid a cycle: manager imports query, query imports
+    # this package's sql sub-package, and the package __init__ pulls in
+    # base. Local import keeps base.py independent of manager.py at load.
+    from django_async_backend.db.models.manager import Manager as _Manager
+
+    objects = _Manager()
 
     class Meta:
         abstract = True

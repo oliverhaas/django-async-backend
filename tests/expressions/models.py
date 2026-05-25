@@ -2,18 +2,18 @@ import uuid
 
 from django.db import models
 
-from django_async_backend.db.models.base import AsyncModel
+from django_async_backend.db.models.base import AsyncModelMixin
 from django_async_backend.db.models.manager import AsyncManager
 
 
-class Manager(AsyncModel, models.Model):
+class Manager(AsyncModelMixin, models.Model):
     name = models.CharField(max_length=50)
     secretary = models.ForeignKey("Employee", models.CASCADE, null=True, related_name="managers")
 
     async_object = AsyncManager()
 
 
-class Employee(AsyncModel, models.Model):
+class Employee(AsyncModelMixin, models.Model):
     firstname = models.CharField(max_length=50)
     lastname = models.CharField(max_length=50)
     salary = models.IntegerField(blank=True, null=True)
@@ -32,7 +32,7 @@ class RemoteEmployee(Employee):
     async_object = AsyncManager()
 
 
-class Company(AsyncModel, models.Model):
+class Company(AsyncModelMixin, models.Model):
     name = models.CharField(max_length=100)
     num_employees = models.PositiveIntegerField()
     num_chairs = models.PositiveIntegerField()
@@ -55,7 +55,7 @@ class Company(AsyncModel, models.Model):
         return self.name
 
 
-class Number(AsyncModel, models.Model):
+class Number(AsyncModelMixin, models.Model):
     integer = models.BigIntegerField(db_column="the_integer")
     float = models.FloatField(null=True, db_column="the_float")
     decimal_value = models.DecimalField(max_digits=20, decimal_places=17, null=True)
@@ -63,7 +63,7 @@ class Number(AsyncModel, models.Model):
     async_object = AsyncManager()
 
 
-class Experiment(AsyncModel, models.Model):
+class Experiment(AsyncModelMixin, models.Model):
     name = models.CharField(max_length=24)
     assigned = models.DateField()
     completed = models.DateField()
@@ -82,20 +82,20 @@ class Experiment(AsyncModel, models.Model):
         return self.end - self.start
 
 
-class Result(AsyncModel, models.Model):
+class Result(AsyncModelMixin, models.Model):
     experiment = models.ForeignKey(Experiment, models.CASCADE)
     result_time = models.DateTimeField()
 
     async_object = AsyncManager()
 
 
-class Time(AsyncModel, models.Model):
+class Time(AsyncModelMixin, models.Model):
     time = models.TimeField(null=True)
 
     async_object = AsyncManager()
 
 
-class SimulationRun(AsyncModel, models.Model):
+class SimulationRun(AsyncModelMixin, models.Model):
     start = models.ForeignKey(Time, models.CASCADE, null=True, related_name="+")
     end = models.ForeignKey(Time, models.CASCADE, null=True, related_name="+")
     midpoint = models.TimeField()
@@ -103,26 +103,26 @@ class SimulationRun(AsyncModel, models.Model):
     async_object = AsyncManager()
 
 
-class UUIDPK(AsyncModel, models.Model):
+class UUIDPK(AsyncModelMixin, models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
 
     async_object = AsyncManager()
 
 
-class UUID(AsyncModel, models.Model):
+class UUID(AsyncModelMixin, models.Model):
     uuid = models.UUIDField(null=True)
     uuid_fk = models.ForeignKey(UUIDPK, models.CASCADE, null=True)
 
     async_object = AsyncManager()
 
 
-class Text(AsyncModel, models.Model):
+class Text(AsyncModelMixin, models.Model):
     name = models.TextField()
 
     async_object = AsyncManager()
 
 
-class JSONFieldModel(AsyncModel, models.Model):
+class JSONFieldModel(AsyncModelMixin, models.Model):
     data = models.JSONField(null=True)
 
     async_object = AsyncManager()

@@ -1,11 +1,11 @@
 from django.db import models
 from django.db.models.lookups import IsNull
 
-from django_async_backend.db.models.base import AsyncModel
+from django_async_backend.db.models.base import AsyncModelMixin
 from django_async_backend.db.models.manager import AsyncManager
 
 
-class Alarm(AsyncModel, models.Model):
+class Alarm(AsyncModelMixin, models.Model):
     desc = models.CharField(max_length=100)
     time = models.TimeField()
 
@@ -15,7 +15,7 @@ class Alarm(AsyncModel, models.Model):
         return "%s (%s)" % (self.time, self.desc)
 
 
-class Author(AsyncModel, models.Model):
+class Author(AsyncModelMixin, models.Model):
     name = models.CharField(max_length=100)
     alias = models.CharField(max_length=50, null=True, blank=True)  # noqa: DJ001
     bio = models.TextField(null=True)  # noqa: DJ001
@@ -26,7 +26,7 @@ class Author(AsyncModel, models.Model):
         ordering = ("name",)
 
 
-class Article(AsyncModel, models.Model):
+class Article(AsyncModelMixin, models.Model):
     headline = models.CharField(max_length=100)
     pub_date = models.DateTimeField()
     author = models.ForeignKey(Author, models.SET_NULL, blank=True, null=True)
@@ -41,7 +41,7 @@ class Article(AsyncModel, models.Model):
         return self.headline
 
 
-class Tag(AsyncModel, models.Model):
+class Tag(AsyncModelMixin, models.Model):
     articles = models.ManyToManyField(Article)
     name = models.CharField(max_length=100)
 
@@ -68,7 +68,7 @@ class IsNullWithNoneAsRHS(IsNull):
     can_use_none_as_rhs = True
 
 
-class Season(AsyncModel, models.Model):
+class Season(AsyncModelMixin, models.Model):
     year = models.PositiveSmallIntegerField()
     gt = models.IntegerField(null=True, blank=True)
     nulled_text_field = NulledTextField(null=True)
@@ -84,7 +84,7 @@ class Season(AsyncModel, models.Model):
         return str(self.year)
 
 
-class Game(AsyncModel, models.Model):
+class Game(AsyncModelMixin, models.Model):
     season = models.ForeignKey(Season, models.CASCADE, related_name="games")
     home = models.CharField(max_length=100)
     away = models.CharField(max_length=100)
@@ -92,21 +92,21 @@ class Game(AsyncModel, models.Model):
     async_object = AsyncManager()
 
 
-class Player(AsyncModel, models.Model):
+class Player(AsyncModelMixin, models.Model):
     name = models.CharField(max_length=100)
     games = models.ManyToManyField(Game, related_name="players")
 
     async_object = AsyncManager()
 
 
-class Product(AsyncModel, models.Model):
+class Product(AsyncModelMixin, models.Model):
     name = models.CharField(max_length=80)
     qty_target = models.DecimalField(max_digits=6, decimal_places=2)
 
     async_object = AsyncManager()
 
 
-class Stock(AsyncModel, models.Model):
+class Stock(AsyncModelMixin, models.Model):
     product = models.ForeignKey(Product, models.CASCADE)
     short = models.BooleanField(default=False)
     qty_available = models.DecimalField(max_digits=6, decimal_places=2)
@@ -114,7 +114,7 @@ class Stock(AsyncModel, models.Model):
     async_object = AsyncManager()
 
 
-class Freebie(AsyncModel, models.Model):
+class Freebie(AsyncModelMixin, models.Model):
     gift_product = models.ForeignKey(Product, models.CASCADE)
     stock_id = models.IntegerField(blank=True, null=True)
 

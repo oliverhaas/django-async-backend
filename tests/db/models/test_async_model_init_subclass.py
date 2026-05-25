@@ -1,12 +1,12 @@
 import pytest
 
-from django_async_backend.db.models.base import AsyncModel
+from django_async_backend.db.models.base import AsyncModelMixin
 
 
 def test_save_without_asave_raises():
     with pytest.raises(TypeError, match=r"overrides save.*without overriding asave"):
 
-        class BadModel(AsyncModel):
+        class BadModel(AsyncModelMixin):
             def save(self, *args, **kwargs):
                 pass
 
@@ -14,13 +14,13 @@ def test_save_without_asave_raises():
 def test_delete_without_adelete_raises():
     with pytest.raises(TypeError, match=r"overrides delete.*without overriding adelete"):
 
-        class BadModel(AsyncModel):
+        class BadModel(AsyncModelMixin):
             def delete(self, *args, **kwargs):
                 pass
 
 
 def test_save_and_asave_together_ok():
-    class GoodModel(AsyncModel):
+    class GoodModel(AsyncModelMixin):
         def save(self, *args, **kwargs):
             pass
 
@@ -29,7 +29,7 @@ def test_save_and_asave_together_ok():
 
 
 def test_no_overrides_ok():
-    class PlainModel(AsyncModel):
+    class PlainModel(AsyncModelMixin):
         pass
 
 
@@ -40,12 +40,12 @@ def test_mixin_with_save_only_raises():
 
     with pytest.raises(TypeError, match="SaveMixin overrides save"):
 
-        class MixedModel(SaveMixin, AsyncModel):
+        class MixedModel(SaveMixin, AsyncModelMixin):
             pass
 
 
 def test_inheriting_compliant_parent_ok():
-    class Parent(AsyncModel):
+    class Parent(AsyncModelMixin):
         def save(self, *args, **kwargs):
             pass
 
@@ -57,13 +57,13 @@ def test_inheriting_compliant_parent_ok():
 
 
 def test_strict_false_skips_check():
-    class Unguarded(AsyncModel, async_mro_strict=False):
+    class Unguarded(AsyncModelMixin, async_mro_strict=False):
         def save(self, *args, **kwargs):
             pass
 
 
 def test_strict_false_does_not_propagate_to_children():
-    class Parent(AsyncModel, async_mro_strict=False):
+    class Parent(AsyncModelMixin, async_mro_strict=False):
         def save(self, *args, **kwargs):
             pass
 

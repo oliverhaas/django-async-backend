@@ -9,7 +9,7 @@ from django.db.models.query import QuerySet as DjangoQuerySet
 
 from django_async_backend.db.models import (
     AsyncManager,
-    AsyncModel,
+    AsyncModelMixin,
     Manager,
     Model,
     QuerySet,
@@ -30,7 +30,7 @@ def test_manager_subclasses_base_manager_and_wires_our_queryset():
 def test_model_includes_async_mixin_and_django_model():
     import django.db.models
 
-    assert issubclass(Model, AsyncModel)
+    assert issubclass(Model, AsyncModelMixin)
     assert issubclass(Model, django.db.models.Model)
 
 
