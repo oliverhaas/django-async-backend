@@ -41,7 +41,7 @@ INSTALLED_APPS = [
 from django_async_backend.db.transaction import aatomic
 
 async with aatomic():
-    await MyModel.async_object.acreate(name="test")
+    await MyModel.objects.acreate(name="test")
 ```
 
 Nested `aatomic` blocks create savepoints. Cross-task transaction reuse is detected and raises `RuntimeError`. Use `_independent_connection()` or a parent-level transaction instead.
@@ -50,7 +50,52 @@ Nested `aatomic` blocks create savepoints. Cross-task transaction reuse is detec
 
 ## Model Support
 
-Inherit from `AsyncModel` to get async instance methods:
+Subclass `Model` to get the async ORM with a single base class. The default `objects` manager exposes both Django's sync API and our async API on the same QuerySet.
+
+```python
+from django.db import models
+
+from django_async_backend.db.models import Model, Manager
+
+class MyModel(Model):
+    name = models.CharField(max_length=100)
+    objects = Manager()
+```
+
+Then:
+
+```python
+# Async I/O (real async, uses the async connection pool):
+obj = await MyModel.objects.aget(pk=1)
+async for row in MyModel.objects.filter(active=True):
+    ...
+
+# Sync query construction (inherited from Django, no I/O):
+qs = MyModel.objects.filter(active=True).order_by("name")
+count = await qs.acount()
+```
+
+`Model` validates at class definition time that any subclass overriding `save()` also overrides `asave()` (and `delete()`/`adelete()`), preventing silent logic skipping. Pass `async_mro_strict=False` to opt out.
+
+### Third-party models
+
+For models you can't modify, use the monkey-patch helpers:
+
+```python
+from django_async_backend.db.models import enable_async, enable_async_globally
+from some_pkg.models import ThirdPartyModel
+
+# Per-model opt-in:
+enable_async(ThirdPartyModel)
+obj = await ThirdPartyModel.objects.aget(pk=1)
+
+# Global opt-in (call from AppConfig.ready):
+enable_async_globally()
+```
+
+### Legacy mixin
+
+The `AsyncModel` mixin and `AsyncManager` alias still work for code written before the unified API:
 
 ```python
 from django_async_backend.db.models.base import AsyncModel
@@ -60,8 +105,6 @@ class MyModel(AsyncModel, models.Model):
     name = models.CharField(max_length=100)
     async_object = AsyncManager()
 ```
-
-`AsyncModel` checks at class definition time that any subclass overriding `save()` also overrides `asave()` (and same for `delete()`/`adelete()`), preventing silent logic skipping. Set `async_mro_strict=False` to opt out.
 
 ### QuerySet Methods
 

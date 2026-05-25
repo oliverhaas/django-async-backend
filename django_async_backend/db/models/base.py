@@ -1,7 +1,13 @@
 """
-Async model mixin providing asave() and adelete() for Django models.
+Base Model class for async backend.
 
-Usage:
+Usage (preferred):
+    from django_async_backend.db.models import Model
+
+    class MyModel(Model):
+        name = models.CharField(max_length=100)
+
+Usage (legacy mixin, still supported):
     from django.db import models
     from django_async_backend.db.models.base import AsyncModel
 
@@ -16,6 +22,7 @@ Signals:
 
 from functools import partialmethod
 
+import django.db.models
 from django.db import connections, router
 from django.db.models import DateField, DateTimeField, Q
 from django.db.models.signals import class_prepared, pre_save, post_save
@@ -48,7 +55,12 @@ class_prepared.connect(_register_async_date_accessors)
 
 
 class AsyncModel:
-    """Mixin that adds truly async asave() and adelete() to Django models."""
+    """Mixin that adds truly async asave() and adelete() to Django models.
+
+    Prefer subclassing Model (which combines this mixin with django.db.models.Model)
+    for new code. This mixin remains for legacy use with explicit
+    multiple inheritance: class MyModel(AsyncModel, models.Model).
+    """
 
     def __init_subclass__(cls, async_mro_strict=True, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -468,3 +480,18 @@ class AsyncModel:
                 field.delete_cached_value(self)
 
         self._state.db = db_instance._state.db
+
+
+class Model(AsyncModel, django.db.models.Model):
+    """Base class for async-backend models.
+
+    Subclass this for new code:
+        class MyModel(Model):
+            name = models.CharField(max_length=100)
+
+    Inherits AsyncModel (asave/adelete/arefresh_from_db/aget_next_by_FIELD)
+    and django.db.models.Model in a single declaration.
+    """
+
+    class Meta:
+        abstract = True

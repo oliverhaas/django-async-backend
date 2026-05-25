@@ -29,6 +29,17 @@ from django.db.models import (
     Max,
     sql,
 )
+from django.db.models.query import (
+    BaseIterable as DjangoBaseIterable,
+    FlatValuesListIterable as DjangoFlatValuesListIterable,
+    ModelIterable as DjangoModelIterable,
+    NamedValuesListIterable as DjangoNamedValuesListIterable,
+    QuerySet as DjangoQuerySet,
+    RawModelIterable as DjangoRawModelIterable,
+    RawQuerySet as DjangoRawQuerySet,
+    ValuesIterable as DjangoValuesIterable,
+    ValuesListIterable as DjangoValuesListIterable,
+)
 from django.db.models.constants import (
     LOOKUP_SEP,
     OnConflict,
@@ -76,14 +87,11 @@ REPR_OUTPUT_SIZE = 20
 PROHIBITED_FILTER_KWARGS = frozenset(["_connector", "_negated"])
 
 
-class BaseIterable:
-    def __init__(self, queryset, chunked_fetch=False, chunk_size=GET_ITERATOR_CHUNK_SIZE):
-        self.queryset = queryset
-        self.chunked_fetch = chunked_fetch
-        self.chunk_size = chunk_size
+class BaseIterable(DjangoBaseIterable):
+    pass
 
 
-class ModelIterable(BaseIterable):
+class ModelIterable(DjangoModelIterable):
     """Iterable that yields a model instance for each row."""
 
     async def __aiter__(self):
@@ -143,7 +151,7 @@ class ModelIterable(BaseIterable):
             yield obj
 
 
-class RawModelIterable(BaseIterable):
+class RawModelIterable(DjangoRawModelIterable):
     """
     Iterable that yields a model instance for each row from a raw queryset.
     """
@@ -184,7 +192,7 @@ class RawModelIterable(BaseIterable):
                 await query.cursor.close()
 
 
-class ValuesIterable(BaseIterable):
+class ValuesIterable(DjangoValuesIterable):
     """
     Iterable returned by QuerySet.values() that yields a dict for each row.
     """
@@ -208,7 +216,7 @@ class ValuesIterable(BaseIterable):
             yield {names[i]: row[i] for i in indexes}
 
 
-class ValuesListIterable(BaseIterable):
+class ValuesListIterable(DjangoValuesListIterable):
     """
     Iterable returned by QuerySet.values_list(flat=False) that yields a tuple
     for each row.
@@ -250,7 +258,7 @@ class NamedValuesListIterable(ValuesListIterable):
             yield new(tuple_class, row)
 
 
-class FlatValuesListIterable(BaseIterable):
+class FlatValuesListIterable(DjangoFlatValuesListIterable):
     """
     Iterable returned by QuerySet.values_list(flat=True) that yields single
     values.
@@ -263,107 +271,72 @@ class FlatValuesListIterable(BaseIterable):
             yield row[0]
 
 
-class QuerySet(AltersData):
-    """Represent a lazy database lookup for a set of objects."""
+class QuerySet(DjangoQuerySet):
+    """
+    Subclass of Django's QuerySet that adds real async I/O.
+
+    Sync methods (filter, get, count, __iter__, __len__, __bool__, ...) are
+    inherited unchanged from Django and use Django's sync connections.
+    Async methods (aget, aexists, acount, __aiter__, ...) override Django's
+    sync_to_async stubs with real async implementations that use the
+    async-capable connection pool.
+    """
 
     def __init__(self, model=None, query=None, using=None, hints=None):
-        self.model = model
-        self._db = using
-        self._hints = hints or {}
-        self._query = query or async_sql.Query(self.model)
-        self._result_cache = None
-        self._sticky_filter = False
-        self._for_write = False
-        self._prefetch_related_lookups = ()
-        self._prefetch_done = False
-        self._known_related_objects = {}  # {rel_field: {pk: rel_obj}}
+        if query is None and model is not None:
+            query = async_sql.Query(model)
+        super().__init__(model=model, query=query, using=using, hints=hints)
         self._iterable_class = ModelIterable
-        self._fields = None
-        self._defer_next_filter = False
-        self._deferred_filter = None
-
-    @property
-    def query(self):
-        if self._deferred_filter:
-            negate, args, kwargs = self._deferred_filter
-            self._filter_or_exclude_inplace(negate, args, kwargs)
-            self._deferred_filter = None
-        return self._query
-
-    @query.setter
-    def query(self, value):
-        if value.values_select:
-            self._iterable_class = ValuesIterable
-        self._query = value
-
-    def as_manager(cls):
-        # Address the circular dependency between `Queryset` and `Manager`.
-        from django.db.models.manager import Manager
-
-        manager = Manager.from_queryset(cls)()
-        manager._built_with_as_manager = True
-        return manager
-
-    as_manager.queryset_only = True
-    as_manager = classmethod(as_manager)
-
-    ########################
-    # PYTHON MAGIC METHODS #
-    ########################
-
-    def __deepcopy__(self, memo):
-        """Don't populate the QuerySet's cache."""
-        obj = self.__class__()
-        for k, v in self.__dict__.items():
-            if k == "_result_cache":
-                obj.__dict__[k] = None
-            else:
-                obj.__dict__[k] = copy.deepcopy(v, memo)
-        return obj
-
-    def __iter__(self):
-        # Sync iteration works when results are already cached (e.g. after
-        # await _fetch_all()). Django internals like get_prefetch_querysets
-        # iterate querysets synchronously; the caller must ensure the
-        # cache is populated before sync iteration.
-        if self._result_cache is not None:
-            return iter(self._result_cache)
-        raise TypeError(
-            "Async QuerySet cannot be iterated synchronously. Use 'async for' or call await qs._fetch_all() first.",
-        )
 
     def __aiter__(self):
         # Remember, __aiter__ itself is synchronous, it's the thing it returns
         # that is async!
         async def generator():
-            await self._fetch_all()
+            await self._afetch_all()
             for item in self._result_cache:
                 yield item
 
         return generator()
 
+    def __iter__(self):
+        # Sync iteration over already-fetched results works (e.g. after
+        # await qs._afetch_all()). Sync iteration that would need to hit the
+        # DB is not supported because our compiler is async-only.
+        if self._result_cache is not None:
+            return iter(self._result_cache)
+        raise TypeError(
+            "Async QuerySet cannot be iterated synchronously. Use 'async for' "
+            "or call 'await qs._afetch_all()' first to populate the cache.",
+        )
+
+    def _fetch_all(self):
+        # Django's sync _fetch_all calls into the compiler synchronously,
+        # but our compiler is async-only. Block sync I/O with a clear error.
+        if self._result_cache is not None:
+            return
+        raise TypeError(
+            "Async QuerySet cannot fetch results synchronously. "
+            "Use 'await qs._afetch_all()' or an async method (aget, aexists, ...).",
+        )
+
     def __getitem__(self, k):
-        """Retrieve an item or slice from the set of results."""
+        """Retrieve an item or slice from the set of results.
+
+        Returns a coroutine for single-item access and an async generator for
+        slices (when the cache is empty). Sync slice composition (no fetch)
+        falls back to Django's behavior.
+        """
 
         async def fetch_data(query_set, index):
             if query_set._result_cache is None:
-                await query_set._fetch_all()
+                await query_set._afetch_all()
             return query_set._result_cache[index]
 
         async def fetch_data_iter(query_set, index):
             if query_set._result_cache is None:
-                await query_set._fetch_all()
+                await query_set._afetch_all()
             for item in query_set._result_cache[index]:
                 yield item
-
-        def get_data():
-            if self._result_cache is not None:
-                return fetch_data_iter(self, k) if isinstance(k, slice) else fetch_data(self, k)
-
-            if isinstance(k, slice):
-                return fetch_data_iter(qs, slice(None, None, k.step)) if k.step else qs
-
-            return fetch_data(qs, 0)
 
         if not isinstance(k, (int, slice)):
             raise TypeError("QuerySet indices must be integers or slices, not %s." % type(k).__name__)
@@ -373,24 +346,18 @@ class QuerySet(AltersData):
             raise ValueError("Negative indexing is not supported.")
 
         if self._result_cache is not None:
-            return get_data()
+            return fetch_data_iter(self, k) if isinstance(k, slice) else fetch_data(self, k)
 
         if isinstance(k, slice):
             qs = self._chain()
-            if k.start is not None:
-                start = int(k.start)
-            else:
-                start = None
-            if k.stop is not None:
-                stop = int(k.stop)
-            else:
-                stop = None
+            start = int(k.start) if k.start is not None else None
+            stop = int(k.stop) if k.stop is not None else None
             qs.query.set_limits(start, stop)
-            return get_data()
+            return fetch_data_iter(qs, slice(None, None, k.step)) if k.step else qs
 
         qs = self._chain()
         qs.query.set_limits(k, k + 1)
-        return get_data()
+        return fetch_data(qs, 0)
 
     def __class_getitem__(cls, *args, **kwargs):
         return cls
@@ -995,7 +962,7 @@ class QuerySet(AltersData):
             return await self.query.has_results(using=self.db)
         return bool(self._result_cache)
 
-    async def _prefetch_related_objects(self):
+    async def _aprefetch_related_objects(self):
         # This method can only be called once the result cache has been filled.
         await prefetch_related_objects(self._result_cache, *self._prefetch_related_lookups)
         self._prefetch_done = True
@@ -1720,11 +1687,11 @@ class QuerySet(AltersData):
         c._fields = self._fields
         return c
 
-    async def _fetch_all(self):
+    async def _afetch_all(self):
         if self._result_cache is None:
             self._result_cache = list([i async for i in self._iterable_class(self)])
         if self._prefetch_related_lookups and not self._prefetch_done:
-            await self._prefetch_related_objects()
+            await self._aprefetch_related_objects()
 
     def _next_is_sticky(self):
         """
@@ -2358,8 +2325,8 @@ async def _prefetch_fk_queryset(instances, prefetcher, lookup, level, *, forward
         instances_dict = {instance_attr(inst): inst for inst in instances}
         rel_qs = _filter_prefetch_queryset(rel_qs, field.name, instances)
 
-    if hasattr(rel_qs, "_fetch_all") and rel_qs._result_cache is None:
-        await rel_qs._fetch_all()
+    if hasattr(rel_qs, "_afetch_all") and rel_qs._result_cache is None:
+        await rel_qs._afetch_all()
 
     # Set cached FK values on related objects (mirrors Django's sync loop).
     remote_field = field.remote_field
@@ -2434,8 +2401,8 @@ async def prefetch_one_level(instances, prefetcher, lookup, level):
         rel_qs._prefetch_related_lookups = ()
 
     # Populate cache asynchronously, then read from it.
-    if hasattr(rel_qs, "_fetch_all") and rel_qs._result_cache is None:
-        await rel_qs._fetch_all()
+    if hasattr(rel_qs, "_afetch_all") and rel_qs._result_cache is None:
+        await rel_qs._afetch_all()
         all_related_objects = list(rel_qs._result_cache)
     else:
         all_related_objects = list(rel_qs)

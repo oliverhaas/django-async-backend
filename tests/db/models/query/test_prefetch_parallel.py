@@ -41,7 +41,7 @@ async def test_prefetch_concurrent_execution(async_db):
     # With sequential execution, query 1 finishes before query 2 starts.
     # With concurrent execution, both start before either finishes.
     events = []
-    original_fetch_all = type(Article.async_object.all())._fetch_all
+    original_fetch_all = type(Article.async_object.all())._afetch_all
 
     async def tracked_fetch_all(self):
         qs_model = self.model.__name__
@@ -50,7 +50,7 @@ async def test_prefetch_concurrent_execution(async_db):
         events.append(f"end:{qs_model}")
         return result
 
-    with mock.patch.object(type(Article.async_object.all()), "_fetch_all", tracked_fetch_all):
+    with mock.patch.object(type(Article.async_object.all()), "_afetch_all", tracked_fetch_all):
         articles = [a async for a in Article.async_object.prefetch_related("author", "tag_set")]
 
     assert len(articles) == 1
