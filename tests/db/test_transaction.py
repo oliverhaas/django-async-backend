@@ -5,56 +5,56 @@ import pytest
 from django.db import DEFAULT_DB_ALIAS, DatabaseError, Error, IntegrityError, transaction
 
 from django_async_backend.db import async_connections
-from django_async_backend.db.transaction import async_atomic, async_mark_for_rollback_on_error
+from django_async_backend.db.transaction import aatomic, async_mark_for_rollback_on_error
 from tests.fixtures.reporter_table import fetch_all_reporters, insert_reporter
 
 # ── Durable atomic blocks ──────────────────────────────────────────────
 
 
 async def test_durable_atomic_commit(reporter_table_transaction):
-    async with async_atomic(durable=True):
+    async with aatomic(durable=True):
         await insert_reporter(1)
     assert await fetch_all_reporters() == ["1"]
 
 
 async def test_durable_rollback(reporter_table_transaction):
     with pytest.raises(Exception, match="force"):
-        async with async_atomic(durable=True):
+        async with aatomic(durable=True):
             await insert_reporter(1)
             raise Exception("force")
     assert await fetch_all_reporters() == []
 
 
 async def test_durable_nested_outer(reporter_table_transaction):
-    async with async_atomic(durable=True):
+    async with aatomic(durable=True):
         await insert_reporter(1)
-        async with async_atomic():
+        async with aatomic():
             await insert_reporter(2)
     assert await fetch_all_reporters() == ["1", "2"]
 
 
 async def test_durable_nested_both(reporter_table_transaction):
     msg = "A durable atomic block cannot be nested within another atomic block."
-    async with async_atomic(durable=True):
+    async with aatomic(durable=True):
         with pytest.raises(RuntimeError, match=msg):
-            async with async_atomic(durable=True):
+            async with aatomic(durable=True):
                 pass
 
 
 async def test_durable_nested_inner(reporter_table_transaction):
     msg = "A durable atomic block cannot be nested within another atomic block."
-    async with async_atomic():
+    async with aatomic():
         with pytest.raises(RuntimeError, match=msg):
-            async with async_atomic(durable=True):
+            async with aatomic(durable=True):
                 pass
 
 
 async def test_durable_sequence(reporter_table_transaction):
-    async with async_atomic(durable=True):
+    async with aatomic(durable=True):
         await insert_reporter(1)
     assert await fetch_all_reporters() == ["1"]
 
-    async with async_atomic(durable=True):
+    async with aatomic(durable=True):
         await insert_reporter(2)
     assert await fetch_all_reporters() == ["1", "2"]
 
@@ -66,7 +66,7 @@ async def test_durable_sequence(reporter_table_transaction):
 # AsyncAtomicWithoutAutocommitTests):
 #
 #   1. plain: no outer transaction, autocommit on
-#   2. inside_transaction: wrapped in an outer async_atomic
+#   2. inside_transaction: wrapped in an outer aatomic
 #   3. without_autocommit: autocommit off, rollback before/after
 #
 # Each mode is a fixture that yields inside the right state.
@@ -77,14 +77,14 @@ async def _in_atomic_mode(reporter_table_transaction, request):
     """Parametrized fixture: runs each test in three atomic modes.
 
     - plain: no outer transaction, autocommit on
-    - inside_transaction: wrapped in an outer async_atomic
+    - inside_transaction: wrapped in an outer aatomic
     - without_autocommit: autocommit off, rollback after
     """
     mode = request.param
     if mode == "plain":
         yield
     elif mode == "inside_transaction":
-        atomic = async_atomic()
+        atomic = aatomic()
         atomic._from_testcase = True
         await atomic.__aenter__()
         try:
@@ -102,7 +102,7 @@ async def _in_atomic_mode(reporter_table_transaction, request):
 
 
 async def test_decorator_syntax_commit(_in_atomic_mode):
-    @async_atomic
+    @aatomic
     async def make_reporter():
         return await insert_reporter(1)
 
@@ -111,7 +111,7 @@ async def test_decorator_syntax_commit(_in_atomic_mode):
 
 
 async def test_decorator_syntax_rollback(_in_atomic_mode):
-    @async_atomic
+    @aatomic
     async def make_reporter():
         await insert_reporter(1)
         raise Exception("Oops")
@@ -122,7 +122,7 @@ async def test_decorator_syntax_rollback(_in_atomic_mode):
 
 
 async def test_alternate_decorator_syntax_commit(_in_atomic_mode):
-    @async_atomic()
+    @aatomic()
     async def make_reporter():
         return await insert_reporter(1)
 
@@ -131,7 +131,7 @@ async def test_alternate_decorator_syntax_commit(_in_atomic_mode):
 
 
 async def test_alternate_decorator_syntax_rollback(_in_atomic_mode):
-    @async_atomic()
+    @aatomic()
     async def make_reporter():
         await insert_reporter(1)
         raise Exception("Oops")
@@ -142,32 +142,32 @@ async def test_alternate_decorator_syntax_rollback(_in_atomic_mode):
 
 
 async def test_commit(_in_atomic_mode):
-    async with async_atomic():
+    async with aatomic():
         reporter = await insert_reporter(1)
     assert await fetch_all_reporters() == [reporter]
 
 
 async def test_rollback(_in_atomic_mode):
     with pytest.raises(Exception, match="Oops"):
-        async with async_atomic():
+        async with aatomic():
             await insert_reporter(1)
             raise Exception("Oops")
     assert await fetch_all_reporters() == []
 
 
 async def test_nested_commit_commit(_in_atomic_mode):
-    async with async_atomic():
+    async with aatomic():
         reporter1 = await insert_reporter(1)
-        async with async_atomic():
+        async with aatomic():
             reporter2 = await insert_reporter(2)
     assert await fetch_all_reporters() == [reporter1, reporter2]
 
 
 async def test_nested_commit_rollback(_in_atomic_mode):
-    async with async_atomic():
+    async with aatomic():
         reporter = await insert_reporter(1)
         with pytest.raises(Exception, match="Oops"):
-            async with async_atomic():
+            async with aatomic():
                 await insert_reporter(2)
                 raise Exception("Oops")
     assert await fetch_all_reporters() == [reporter]
@@ -175,9 +175,9 @@ async def test_nested_commit_rollback(_in_atomic_mode):
 
 async def test_nested_rollback_commit(_in_atomic_mode):
     with pytest.raises(Exception, match="Oops"):
-        async with async_atomic():
+        async with aatomic():
             await insert_reporter(1)
-            async with async_atomic():
+            async with aatomic():
                 await insert_reporter(2)
             raise Exception("Oops")
     assert await fetch_all_reporters() == []
@@ -185,10 +185,10 @@ async def test_nested_rollback_commit(_in_atomic_mode):
 
 async def test_nested_rollback_rollback(_in_atomic_mode):
     with pytest.raises(Exception, match="Oops"):
-        async with async_atomic():
+        async with aatomic():
             await insert_reporter(1)
             with pytest.raises(Exception, match="Oops"):
-                async with async_atomic():
+                async with aatomic():
                     await insert_reporter(2)
                 raise Exception("Oops")
             raise Exception("Oops")
@@ -196,18 +196,18 @@ async def test_nested_rollback_rollback(_in_atomic_mode):
 
 
 async def test_merged_commit_commit(_in_atomic_mode):
-    async with async_atomic():
+    async with aatomic():
         reporter1 = await insert_reporter(1)
-        async with async_atomic(savepoint=False):
+        async with aatomic(savepoint=False):
             reporter2 = await insert_reporter(2)
     assert await fetch_all_reporters() == [reporter1, reporter2]
 
 
 async def test_merged_commit_rollback(_in_atomic_mode):
-    async with async_atomic():
+    async with aatomic():
         await insert_reporter(1)
         with pytest.raises(Exception, match="Oops"):
-            async with async_atomic(savepoint=False):
+            async with aatomic(savepoint=False):
                 await insert_reporter(2)
                 raise Exception("Oops")
     # Writes in the outer block are rolled back too.
@@ -216,9 +216,9 @@ async def test_merged_commit_rollback(_in_atomic_mode):
 
 async def test_merged_rollback_commit(_in_atomic_mode):
     with pytest.raises(Exception, match="Oops"):
-        async with async_atomic():
+        async with aatomic():
             await insert_reporter(1)
-            async with async_atomic(savepoint=False):
+            async with aatomic(savepoint=False):
                 await insert_reporter(2)
             raise Exception("Oops")
     assert await fetch_all_reporters() == []
@@ -226,10 +226,10 @@ async def test_merged_rollback_commit(_in_atomic_mode):
 
 async def test_merged_rollback_rollback(_in_atomic_mode):
     with pytest.raises(Exception, match="Oops"):
-        async with async_atomic():
+        async with aatomic():
             await insert_reporter(1)
             with pytest.raises(Exception, match="Oops"):
-                async with async_atomic(savepoint=False):
+                async with aatomic(savepoint=False):
                     await insert_reporter(2)
                 raise Exception("Oops")
             raise Exception("Oops")
@@ -237,7 +237,7 @@ async def test_merged_rollback_rollback(_in_atomic_mode):
 
 
 async def test_reuse_commit_commit(_in_atomic_mode):
-    atomic = async_atomic()
+    atomic = aatomic()
     async with atomic:
         reporter1 = await insert_reporter(1)
         async with atomic:
@@ -246,7 +246,7 @@ async def test_reuse_commit_commit(_in_atomic_mode):
 
 
 async def test_reuse_commit_rollback(_in_atomic_mode):
-    atomic = async_atomic()
+    atomic = aatomic()
     async with atomic:
         reporter = await insert_reporter(1)
         with pytest.raises(Exception, match="Oops"):
@@ -257,7 +257,7 @@ async def test_reuse_commit_rollback(_in_atomic_mode):
 
 
 async def test_reuse_rollback_commit(_in_atomic_mode):
-    atomic = async_atomic()
+    atomic = aatomic()
     with pytest.raises(Exception, match="Oops"):
         async with atomic:
             await insert_reporter(1)
@@ -268,7 +268,7 @@ async def test_reuse_rollback_commit(_in_atomic_mode):
 
 
 async def test_reuse_rollback_rollback(_in_atomic_mode):
-    atomic = async_atomic()
+    atomic = aatomic()
     with pytest.raises(Exception, match="Oops"):
         async with atomic:
             await insert_reporter(1)
@@ -281,7 +281,7 @@ async def test_reuse_rollback_rollback(_in_atomic_mode):
 
 
 async def test_force_rollback(_in_atomic_mode):
-    async with async_atomic():
+    async with aatomic():
         await insert_reporter(1)
         assert not async_connections[DEFAULT_DB_ALIAS].get_rollback()
         async_connections[DEFAULT_DB_ALIAS].set_rollback(True)
@@ -290,11 +290,11 @@ async def test_force_rollback(_in_atomic_mode):
 
 async def test_prevent_rollback(_in_atomic_mode):
     connection = async_connections[DEFAULT_DB_ALIAS]
-    async with async_atomic():
+    async with aatomic():
         reporter = await insert_reporter(1)
         sid = await connection.savepoint()
         with pytest.raises(DatabaseError):
-            async with async_atomic(savepoint=False):
+            async with aatomic(savepoint=False):
                 async with await connection.cursor() as cursor:
                     await cursor.execute("SELECT no_such_col FROM reporter_table_tmp")
         assert connection.get_rollback()
@@ -305,10 +305,10 @@ async def test_prevent_rollback(_in_atomic_mode):
 
 async def test_failure_on_exit_transaction(_in_atomic_mode):
     connection = async_connections[DEFAULT_DB_ALIAS]
-    async with async_atomic():
+    async with aatomic():
         try:
             with pytest.raises(DatabaseError):
-                async with async_atomic():
+                async with aatomic():
                     await insert_reporter(1)
                     assert len(await fetch_all_reporters()) == 1
                     connection.savepoint_ids.append("12")
@@ -328,12 +328,12 @@ async def test_failure_on_exit_transaction(_in_atomic_mode):
 async def test_merged_outer_rollback(reporter_table_transaction):
     connection = async_connections[DEFAULT_DB_ALIAS]
 
-    async with async_atomic():
+    async with aatomic():
         await insert_reporter(1)
-        async with async_atomic(savepoint=False):
+        async with aatomic(savepoint=False):
             await insert_reporter(2)
             with pytest.raises(Exception, match="Oops"):
-                async with async_atomic(savepoint=False):
+                async with aatomic(savepoint=False):
                     await insert_reporter(3)
                     raise Exception("Oops")
             # The third insert couldn't be rolled back.
@@ -353,12 +353,12 @@ async def test_merged_outer_rollback(reporter_table_transaction):
 async def test_merged_inner_savepoint_rollback(reporter_table_transaction):
     connection = async_connections[DEFAULT_DB_ALIAS]
 
-    async with async_atomic():
+    async with aatomic():
         reporter = await insert_reporter(1)
-        async with async_atomic():
+        async with aatomic():
             await insert_reporter(2)
             with pytest.raises(Exception, match="Oops"):
-                async with async_atomic(savepoint=False):
+                async with aatomic(savepoint=False):
                     await insert_reporter(3)
                     raise Exception("Oops")
             assert connection.get_rollback()
@@ -379,7 +379,7 @@ _FORBIDDEN_ATOMIC_MSG = "This is forbidden when an 'atomic' block is active."
 async def test_atomic_prevents_setting_autocommit(reporter_table_transaction):
     connection = async_connections[DEFAULT_DB_ALIAS]
     autocommit = await connection.get_autocommit()
-    async with async_atomic():
+    async with aatomic():
         with pytest.raises(transaction.TransactionManagementError, match=_FORBIDDEN_ATOMIC_MSG):
             await connection.set_autocommit(not autocommit)
 
@@ -388,7 +388,7 @@ async def test_atomic_prevents_setting_autocommit(reporter_table_transaction):
 
 async def test_atomic_prevents_calling_transaction_methods(reporter_table_transaction):
     connection = async_connections[DEFAULT_DB_ALIAS]
-    async with async_atomic():
+    async with aatomic():
         with pytest.raises(transaction.TransactionManagementError, match=_FORBIDDEN_ATOMIC_MSG):
             await connection.commit()
         with pytest.raises(transaction.TransactionManagementError, match=_FORBIDDEN_ATOMIC_MSG):
@@ -398,7 +398,7 @@ async def test_atomic_prevents_calling_transaction_methods(reporter_table_transa
 async def test_atomic_prevents_queries_in_broken_transaction(reporter_table_transaction):
     await insert_reporter(1)
 
-    async with async_atomic():
+    async with aatomic():
         with pytest.raises(IntegrityError):
             async with async_mark_for_rollback_on_error(DEFAULT_DB_ALIAS):
                 await insert_reporter(1)
@@ -419,7 +419,7 @@ async def test_atomic_prevents_queries_in_broken_transaction_after_client_close(
 ):
     connection = async_connections[DEFAULT_DB_ALIAS]
 
-    async with async_atomic():
+    async with aatomic():
         await insert_reporter(1)
         await connection.close()
         with pytest.raises(Error):
@@ -470,7 +470,7 @@ async def test_nested_independent_connection(reporter_table_transaction):
 
 
 async def test_nested_independent_connection_with_transaction(reporter_table_transaction):
-    async with async_connections._independent_connection(), async_atomic():
+    async with async_connections._independent_connection(), aatomic():
         await insert_reporter(1)
         assert len(await fetch_all_reporters()) == 1
         async with async_connections._independent_connection():
@@ -479,10 +479,10 @@ async def test_nested_independent_connection_with_transaction(reporter_table_tra
 
 
 async def test_nested_independent_connection_with_nested_transaction(reporter_table_transaction):
-    async with async_connections._independent_connection(), async_atomic():
+    async with async_connections._independent_connection(), aatomic():
         await insert_reporter(1)
         assert len(await fetch_all_reporters()) == 1
-        async with async_connections._independent_connection(), async_atomic():
+        async with async_connections._independent_connection(), aatomic():
             await insert_reporter(2)
             assert len(await fetch_all_reporters()) == 1
 
@@ -490,31 +490,31 @@ async def test_nested_independent_connection_with_nested_transaction(reporter_ta
 # ── Cross-task transaction guard ──────────────────────────────────────
 #
 # Child tasks created via gather/create_task inherit the parent's
-# connection via ContextVar. If a child opens its own async_atomic(),
+# connection via ContextVar. If a child opens its own aatomic(),
 # it would create overlapping transactions on the shared connection,
 # corrupting state. A guard in __aenter__ raises RuntimeError with
 # a clear message instead of allowing silent corruption.
 #
 # Correct patterns:
-#   - Wrap all tasks in a single parent async_atomic()
+#   - Wrap all tasks in a single parent aatomic()
 #   - Use _independent_connection() per task
 
 
 async def test_child_task_atomic_raises(reporter_table_transaction):
     async def writer():
-        async with async_atomic():
+        async with aatomic():
             await insert_reporter("should_fail")
 
-    async with async_atomic():
+    async with aatomic():
         with pytest.raises(RuntimeError, match="nested task"):
             await asyncio.create_task(writer())
 
 
 async def test_concurrent_gather_atomic_raises(reporter_table_transaction):
-    """gather() where each task opens async_atomic() raises.
+    """gather() where each task opens aatomic() raises.
 
     This is the original issue #11 pattern: no parent atomic,
-    each child independently opens async_atomic(). The first
+    each child independently opens aatomic(). The first
     child stamps the connection, subsequent children see the
     mismatch.
     """
@@ -524,28 +524,28 @@ async def test_concurrent_gather_atomic_raises(reporter_table_transaction):
     async def writer(task_id):
         try:
             await barrier.wait()
-            async with async_atomic():
+            async with aatomic():
                 await insert_reporter(f"t{task_id}")
                 await asyncio.sleep(0)
         except RuntimeError as e:
             errors.append((task_id, e))
 
     await asyncio.gather(*(writer(i) for i in range(10)))
-    assert len(errors) > 0, "Expected RuntimeError from concurrent async_atomic()"
+    assert len(errors) > 0, "Expected RuntimeError from concurrent aatomic()"
 
 
 async def test_nested_savepoint_same_task_works(reporter_table_transaction):
-    async with async_atomic():
+    async with aatomic():
         await insert_reporter("outer")
-        async with async_atomic():
+        async with aatomic():
             await insert_reporter("inner")
     assert len(await fetch_all_reporters()) == 2
 
 
 async def test_sequential_atomic_same_task_works(reporter_table_transaction):
-    async with async_atomic():
+    async with aatomic():
         await insert_reporter("first")
-    async with async_atomic():
+    async with aatomic():
         await insert_reporter("second")
     assert len(await fetch_all_reporters()) == 2
 
@@ -562,7 +562,7 @@ async def test_parent_atomic_avoids_corruption(reporter_table_transaction):
         except Exception as e:
             errors.append((task_id, e))
 
-    async with async_atomic():
+    async with aatomic():
         await asyncio.gather(*(writer(i) for i in range(10)))
 
     assert errors == []
@@ -577,7 +577,7 @@ async def test_independent_connection_avoids_corruption(reporter_table_transacti
         try:
             await barrier.wait()
             async with async_connections._independent_connection():
-                async with async_atomic():
+                async with aatomic():
                     await insert_reporter(f"i{task_id}")
                     await asyncio.sleep(0)
         except Exception as e:
@@ -593,23 +593,23 @@ async def test_independent_connection_avoids_corruption(reporter_table_transacti
 
 
 async def test_wrap_callable_instance():
-    """#20028 -- async_atomic must support wrapping callable instances."""
+    """#20028 -- aatomic must support wrapping callable instances."""
 
     class Callable:
         async def __call__(self):
             pass
 
     # Must not raise an exception
-    async_atomic()(Callable())
+    aatomic()(Callable())
 
 
 async def test_atomic_does_not_leak_savepoints_on_failure(reporter_table_transaction):
     """#23074 -- Savepoints must be released after rollback."""
     connection = async_connections[DEFAULT_DB_ALIAS]
     with pytest.raises(Error):
-        async with async_atomic():
+        async with aatomic():
             with pytest.raises(Exception, match="Oops"):
-                async with async_atomic():
+                async with aatomic():
                     sid = connection.savepoint_ids[-1]
                     raise Exception("Oops")
             # The savepoint no longer exists; rolling back to it must fail.
@@ -618,7 +618,7 @@ async def test_atomic_does_not_leak_savepoints_on_failure(reporter_table_transac
 
 async def test_mark_for_rollback_on_error_in_transaction(reporter_table_transaction):
     connection = async_connections[DEFAULT_DB_ALIAS]
-    async with async_atomic(savepoint=False):
+    async with aatomic(savepoint=False):
         with pytest.raises(Exception, match="Oops"):
             async with async_mark_for_rollback_on_error():
                 assert connection.needs_rollback is False

@@ -21,7 +21,7 @@ from django.db.models import DateField, DateTimeField, Q
 from django.db.models.signals import class_prepared, pre_save, post_save
 
 from django_async_backend.db.transaction import (
-    async_atomic,
+    aatomic,
     async_mark_for_rollback_on_error,
 )
 
@@ -170,7 +170,7 @@ class AsyncModel:
             )
 
         if meta.parents:
-            context_manager = async_atomic(using=using, savepoint=False)
+            context_manager = aatomic(using=using, savepoint=False)
         else:
             context_manager = async_mark_for_rollback_on_error(using=using)
         async with context_manager:

@@ -8,7 +8,7 @@ from django.test.utils import override_settings
 
 from django_async_backend.db import async_connections
 from django_async_backend.db.backends.base.base import BaseAsyncDatabaseWrapper
-from django_async_backend.db.transaction import async_atomic
+from django_async_backend.db.transaction import aatomic
 from tests.fixtures.reporter_table import fetch_all_reporters, insert_reporter
 
 # ── DatabaseWrapper ────────────────────────────────────────────────────
@@ -80,7 +80,7 @@ async def test_release_memory_without_garbage_collection(async_db):
 async def test_commit_debug_log(reporter_table_transaction, caplog):
     conn = async_connections[DEFAULT_DB_ALIAS]
     with caplog.at_level(logging.DEBUG, logger="django.db.backends"):
-        async with async_atomic():
+        async with aatomic():
             await insert_reporter(1)
 
     assert len(conn.queries_log) >= 3
@@ -99,7 +99,7 @@ async def test_rollback_debug_log(reporter_table_transaction, caplog):
     conn = async_connections[DEFAULT_DB_ALIAS]
     with caplog.at_level(logging.DEBUG, logger="django.db.backends"):
         with pytest.raises(Exception, match="Force rollback"):
-            async with async_atomic():
+            async with aatomic():
                 await insert_reporter(1)
                 raise Exception("Force rollback")
 
@@ -111,7 +111,7 @@ async def test_rollback_debug_log(reporter_table_transaction, caplog):
 async def test_no_logs_without_debug(reporter_table_transaction, caplog):
     with caplog.at_level(logging.DEBUG, logger="django.db"):
         with pytest.raises(Exception, match="Force rollback"):
-            async with async_atomic():
+            async with aatomic():
                 await insert_reporter(1)
                 raise Exception("Force rollback")
 

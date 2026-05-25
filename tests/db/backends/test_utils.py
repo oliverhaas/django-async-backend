@@ -6,7 +6,7 @@ from django.db.transaction import TransactionManagementError
 from django.test import override_settings
 
 from django_async_backend.db import async_connections
-from django_async_backend.db.transaction import async_atomic
+from django_async_backend.db.transaction import aatomic
 
 
 @pytest.fixture
@@ -24,7 +24,7 @@ async def test_execute(cursor_table):
 
 
 async def test_execute_broken_transaction(async_db):
-    async with async_atomic(DEFAULT_DB_ALIAS):
+    async with aatomic(DEFAULT_DB_ALIAS):
         connection = async_connections[DEFAULT_DB_ALIAS]
         async with await connection.cursor() as cursor:
             connection.set_rollback(True)
@@ -40,7 +40,7 @@ async def test_executemany(cursor_table):
 
 
 async def test_executemany_broken_transaction(async_db):
-    async with async_atomic(DEFAULT_DB_ALIAS):
+    async with aatomic(DEFAULT_DB_ALIAS):
         connection = async_connections[DEFAULT_DB_ALIAS]
         async with await connection.cursor() as cursor:
             connection.set_rollback(True)

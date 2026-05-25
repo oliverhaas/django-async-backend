@@ -5,7 +5,7 @@ from django.db import DEFAULT_DB_ALIAS, transaction
 from shared.models import Reporter
 
 from django_async_backend.db import async_connections
-from django_async_backend.db.transaction import async_atomic
+from django_async_backend.db.transaction import aatomic
 from tests.fixtures.reporter_table import fetch_all_reporters
 
 
@@ -86,7 +86,7 @@ async def test_robust_transaction(hook_state, caplog):
         raise ForcedError("robust callback")
 
     with caplog.at_level(logging.ERROR, logger="django_async_backend.db.backends"):
-        async with async_atomic():
+        async with aatomic():
             await connection.on_commit(robust_callback, robust=True)
             await hook_state.do(1)
 
@@ -100,7 +100,7 @@ async def test_robust_transaction(hook_state, caplog):
 
 
 async def test_delays_execution_until_after_transaction_commit(hook_state):
-    async with async_atomic():
+    async with aatomic():
         await hook_state.do(1)
         assert hook_state.notified == []
     await hook_state.assert_done([1])
@@ -108,7 +108,7 @@ async def test_delays_execution_until_after_transaction_commit(hook_state):
 
 async def test_does_not_execute_if_transaction_rolled_back(hook_state):
     with pytest.raises(ForcedError):
-        async with async_atomic():
+        async with aatomic():
             await hook_state.do(1)
             raise ForcedError
 
@@ -116,8 +116,8 @@ async def test_does_not_execute_if_transaction_rolled_back(hook_state):
 
 
 async def test_executes_only_after_final_transaction_committed(hook_state):
-    async with async_atomic():
-        async with async_atomic():
+    async with aatomic():
+        async with aatomic():
             await hook_state.do(1)
             assert hook_state.notified == []
         assert hook_state.notified == []
@@ -125,14 +125,14 @@ async def test_executes_only_after_final_transaction_committed(hook_state):
 
 
 async def test_discards_hooks_from_rolled_back_savepoint(hook_state):
-    async with async_atomic():
-        async with async_atomic():
+    async with aatomic():
+        async with aatomic():
             await hook_state.do(1)
         with pytest.raises(ForcedError):
-            async with async_atomic():
+            async with aatomic():
                 await hook_state.do(2)
                 raise ForcedError
-        async with async_atomic():
+        async with aatomic():
             await hook_state.do(3)
 
     await hook_state.assert_done([1, 3])
@@ -141,8 +141,8 @@ async def test_discards_hooks_from_rolled_back_savepoint(hook_state):
 async def test_no_hooks_run_from_failed_transaction(hook_state):
     """If outer transaction fails, no hooks from within it run."""
     with pytest.raises(ForcedError):
-        async with async_atomic():
-            async with async_atomic():
+        async with aatomic():
+            async with aatomic():
                 await hook_state.do(1)
             raise ForcedError
 
@@ -150,10 +150,10 @@ async def test_no_hooks_run_from_failed_transaction(hook_state):
 
 
 async def test_inner_savepoint_rolled_back_with_outer(hook_state):
-    async with async_atomic():
+    async with aatomic():
         with pytest.raises(ForcedError):
-            async with async_atomic():
-                async with async_atomic():
+            async with aatomic():
+                async with aatomic():
                     await hook_state.do(1)
                 raise ForcedError
         await hook_state.do(2)
@@ -162,29 +162,29 @@ async def test_inner_savepoint_rolled_back_with_outer(hook_state):
 
 
 async def test_no_savepoints_atomic_merged_with_outer(hook_state):
-    async with async_atomic(), async_atomic():
+    async with aatomic(), aatomic():
         await hook_state.do(1)
         with pytest.raises(ForcedError):
-            async with async_atomic(savepoint=False):
+            async with aatomic(savepoint=False):
                 raise ForcedError
 
     await hook_state.assert_done([])
 
 
 async def test_inner_savepoint_does_not_affect_outer(hook_state):
-    async with async_atomic(), async_atomic():
+    async with aatomic(), aatomic():
         await hook_state.do(1)
         with pytest.raises(ForcedError):
-            async with async_atomic():
+            async with aatomic():
                 raise ForcedError
 
     await hook_state.assert_done([1])
 
 
 async def test_runs_hooks_in_order_registered(hook_state):
-    async with async_atomic():
+    async with aatomic():
         await hook_state.do(1)
-        async with async_atomic():
+        async with aatomic():
             await hook_state.do(2)
         await hook_state.do(3)
 
@@ -192,9 +192,9 @@ async def test_runs_hooks_in_order_registered(hook_state):
 
 
 async def test_hooks_cleared_after_successful_commit(hook_state):
-    async with async_atomic():
+    async with aatomic():
         await hook_state.do(1)
-    async with async_atomic():
+    async with aatomic():
         await hook_state.do(2)
 
     await hook_state.assert_done([1, 2])
@@ -202,11 +202,11 @@ async def test_hooks_cleared_after_successful_commit(hook_state):
 
 async def test_hooks_cleared_after_rollback(hook_state):
     with pytest.raises(ForcedError):
-        async with async_atomic():
+        async with aatomic():
             await hook_state.do(1)
             raise ForcedError
 
-    async with async_atomic():
+    async with aatomic():
         await hook_state.do(2)
 
     await hook_state.assert_done([2])
@@ -215,13 +215,13 @@ async def test_hooks_cleared_after_rollback(hook_state):
 async def test_hooks_cleared_on_reconnect(hook_state):
     connection = async_connections[DEFAULT_DB_ALIAS]
 
-    async with async_atomic():
+    async with aatomic():
         await hook_state.do(1)
         await connection.close()
 
     await connection.connect()
 
-    async with async_atomic():
+    async with aatomic():
         await hook_state.do(2)
 
     await hook_state.assert_done([2])
@@ -231,10 +231,10 @@ async def test_error_in_hook_does_not_prevent_clearing_hooks(hook_state):
     connection = async_connections[DEFAULT_DB_ALIAS]
 
     with pytest.raises(ForcedError):
-        async with async_atomic():
+        async with aatomic():
             await connection.on_commit(lambda: hook_state.notify("error"))
 
-    async with async_atomic():
+    async with aatomic():
         await hook_state.do(1)
 
     await hook_state.assert_done([1])
@@ -246,7 +246,7 @@ async def test_db_query_in_hook(hook_state):
     async def commit():
         return [hook_state.notify(t) for t in await _fetch_int_ids()]
 
-    async with async_atomic():
+    async with aatomic():
         await _create_int_instance(1)
         await connection.on_commit(commit)
 
@@ -257,11 +257,11 @@ async def test_transaction_in_hook(hook_state):
     connection = async_connections[DEFAULT_DB_ALIAS]
 
     async def on_commit():
-        async with async_atomic():
+        async with aatomic():
             t = await _create_int_instance(1)
             hook_state.notify(t)
 
-    async with async_atomic():
+    async with aatomic():
         await connection.on_commit(on_commit)
 
     await hook_state.assert_done([1])
@@ -271,13 +271,13 @@ async def test_hook_in_hook(hook_state):
     connection = async_connections[DEFAULT_DB_ALIAS]
 
     async def on_commit(i, add_hook):
-        async with async_atomic():
+        async with aatomic():
             if add_hook:
                 await connection.on_commit(lambda: on_commit(i + 10, False))
             t = await _create_int_instance(i)
             hook_state.notify(t)
 
-    async with async_atomic():
+    async with aatomic():
         await connection.on_commit(lambda: on_commit(1, True))
         await connection.on_commit(lambda: on_commit(2, True))
 

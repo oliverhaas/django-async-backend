@@ -63,7 +63,7 @@ from django.utils.functional import cached_property
 
 from django_async_backend.db import async_connections
 from django_async_backend.db.transaction import (
-    async_atomic,
+    aatomic,
     async_mark_for_rollback_on_error,
 )
 
@@ -877,7 +877,7 @@ class QuerySet(AltersData):
         except self.model.DoesNotExist:
             params = self._extract_model_params(defaults, **kwargs)
             try:
-                async with async_atomic(using=self.db):
+                async with aatomic(using=self.db):
                     params = dict(resolve_callables(params))
                     return await self.acreate(**params), True
             except IntegrityError:
@@ -904,14 +904,14 @@ class QuerySet(AltersData):
             create_defaults = update_defaults
 
         self._for_write = True
-        async with async_atomic(using=self.db):
+        async with aatomic(using=self.db):
             try:
                 obj = await self.aget(**kwargs)
                 created = False
             except self.model.DoesNotExist:
                 params = self._extract_model_params(create_defaults, **kwargs)
                 try:
-                    async with async_atomic(using=self.db):
+                    async with aatomic(using=self.db):
                         params = dict(resolve_callables(params))
                         obj = await self.acreate(**params)
                         created = True
@@ -980,7 +980,7 @@ class QuerySet(AltersData):
             updates.append(([obj.pk for obj in batch_objs], update_kwargs))
         rows_updated = 0
         queryset = self.using(self.db)
-        async with async_atomic(using=self.db, savepoint=False):
+        async with aatomic(using=self.db, savepoint=False):
             for pks, update_kwargs in updates:
                 rows_updated += await queryset.filter(pk__in=pks).aupdate(**update_kwargs)
         return rows_updated
@@ -1591,7 +1591,7 @@ class QuerySet(AltersData):
         )
         batches = [objs[i : i + batch_size] for i in range(0, len(objs), batch_size)]
         if len(batches) > 1:
-            context = async_atomic(using=self.db, savepoint=False)
+            context = aatomic(using=self.db, savepoint=False)
         else:
             context = nullcontext()
         async with context:
@@ -1649,7 +1649,7 @@ class QuerySet(AltersData):
         objs = list(objs)
         objs_with_pk, objs_without_pk = self._prepare_for_bulk_create(objs)
 
-        async with async_atomic(using=self.db, savepoint=False):
+        async with aatomic(using=self.db, savepoint=False):
             if objs_with_pk:
                 returned_columns = await self._batched_insert(
                     objs_with_pk,

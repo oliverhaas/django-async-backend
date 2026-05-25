@@ -12,7 +12,7 @@ from django.db.models.fields.related_descriptors import (
     create_reverse_many_to_one_manager,
 )
 
-from django_async_backend.db.transaction import async_atomic
+from django_async_backend.db.transaction import aatomic
 
 
 def _get_async_queryset(manager, *, for_write=False):
@@ -63,7 +63,7 @@ class AsyncReverseManyToOneMixin:
 
             await QuerySet(model=self.model, using=db).filter(pk__in=pks).aupdate(**{self.field.name: self.instance})
         else:
-            async with async_atomic(using=db, savepoint=False):
+            async with aatomic(using=db, savepoint=False):
                 for obj in objs:
                     check_and_update_obj(obj)
                     await obj.asave()
@@ -101,7 +101,7 @@ class AsyncReverseManyToOneMixin:
 
         if self.field.null:
             db = router.db_for_write(self.model, instance=self.instance)
-            async with async_atomic(using=db, savepoint=False):
+            async with aatomic(using=db, savepoint=False):
                 if clear:
                     await self.aclear(bulk=bulk)
                     await self.aadd(*objs, bulk=bulk)
@@ -160,7 +160,7 @@ def _add_async_reverse_fk_nullable_methods(cls, rel):
         if bulk:
             await queryset.aupdate(**{self.field.name: None})
         else:
-            async with async_atomic(using=db, savepoint=False):
+            async with aatomic(using=db, savepoint=False):
                 async for obj in queryset:
                     setattr(obj, self.field.name, None)
                     await obj.asave(update_fields=[self.field.name])
@@ -178,7 +178,7 @@ class AsyncManyToManyMixin:
     async def aadd(self, *objs, through_defaults=None):
         self._remove_prefetched_objects()
         db = router.db_for_write(self.through, instance=self.instance)
-        async with async_atomic(using=db, savepoint=False):
+        async with aatomic(using=db, savepoint=False):
             await self._aadd_items(
                 self.source_field_name,
                 self.target_field_name,
@@ -203,7 +203,7 @@ class AsyncManyToManyMixin:
 
     async def aclear(self):
         db = router.db_for_write(self.through, instance=self.instance)
-        async with async_atomic(using=db, savepoint=False):
+        async with aatomic(using=db, savepoint=False):
             await signals.m2m_changed.asend(
                 sender=self.through,
                 action="pre_clear",
@@ -232,7 +232,7 @@ class AsyncManyToManyMixin:
     async def aset(self, objs, *, clear=False, through_defaults=None):
         objs = tuple(objs)
         db = router.db_for_write(self.through, instance=self.instance)
-        async with async_atomic(using=db, savepoint=False):
+        async with aatomic(using=db, savepoint=False):
             if clear:
                 await self.aclear()
                 await self.aadd(*objs, through_defaults=through_defaults)
@@ -332,7 +332,7 @@ class AsyncManyToManyMixin:
             existing.add(val)
         missing_target_ids = target_ids.difference(existing)
 
-        async with async_atomic(using=db, savepoint=False):
+        async with aatomic(using=db, savepoint=False):
             if must_send_signals:
                 await signals.m2m_changed.asend(
                     sender=self.through,
@@ -382,7 +382,7 @@ class AsyncManyToManyMixin:
                 old_ids.add(obj)
 
         db = router.db_for_write(self.through, instance=self.instance)
-        async with async_atomic(using=db, savepoint=False):
+        async with aatomic(using=db, savepoint=False):
             await signals.m2m_changed.asend(
                 sender=self.through,
                 action="pre_remove",

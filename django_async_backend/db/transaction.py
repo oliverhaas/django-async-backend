@@ -96,7 +96,7 @@ class AsyncAtomic(AsyncContextDecorator):
                     "Using a transaction in a nested task is forbidden. "
                     "Use a higher-level transaction that spans all "
                     "nested tasks, or create a new connection for the "
-                    "task via _independent_connection."
+                    "task via _independent_connection.",
                 )
         if not connection.in_atomic_block:
             # Reset state when entering an outermost atomic block.
@@ -219,7 +219,7 @@ class AsyncAtomic(AsyncContextDecorator):
                     connection.in_atomic_block = False
 
 
-def async_atomic(using=None, savepoint=True, durable=False):
+def aatomic(using=None, savepoint=True, durable=False):
     """
     Create a transactional scope for database operations.
 
@@ -230,13 +230,13 @@ def async_atomic(using=None, savepoint=True, durable=False):
 
     Usage as a decorator:
 
-        @transaction.async_atomic(using=using)
+        @transaction.aatomic(using=using)
         async def my_function():
             ...
 
     Equivalent usage as a context manager:
 
-        async with transaction.async_atomic(using=using):
+        async with transaction.aatomic(using=using):
             ...
     """
     if callable(using):

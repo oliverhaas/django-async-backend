@@ -38,13 +38,13 @@ INSTALLED_APPS = [
 ## Async Transactions
 
 ```python
-from django_async_backend.db.transaction import async_atomic
+from django_async_backend.db.transaction import aatomic
 
-async with async_atomic():
+async with aatomic():
     await MyModel.async_object.acreate(name="test")
 ```
 
-Nested `async_atomic` blocks create savepoints. Cross-task transaction reuse is detected and raises `RuntimeError`. Use `_independent_connection()` or a parent-level transaction instead.
+Nested `aatomic` blocks create savepoints. Cross-task transaction reuse is detected and raises `RuntimeError`. Use `_independent_connection()` or a parent-level transaction instead.
 
 ---
 

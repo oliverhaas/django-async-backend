@@ -62,12 +62,12 @@ async def async_db():
     its changes between tests.
     """
     from django_async_backend.db import async_connections
-    from django_async_backend.db.transaction import async_atomic
+    from django_async_backend.db.transaction import aatomic
 
     atomic_cms = {}
     for name in async_connections.settings:
         connection = async_connections[name]
-        atomic = async_atomic(name)
+        atomic = aatomic(name)
         atomic._from_testcase = True
         atomic_cms[name] = atomic
         await atomic_cms[name].__aenter__()

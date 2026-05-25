@@ -23,7 +23,7 @@ from django.db.models.deletion import (
 )
 
 from django_async_backend.db.transaction import (
-    async_atomic,
+    aatomic,
     async_mark_for_rollback_on_error,
 )
 
@@ -398,7 +398,7 @@ class AsyncCollector:
                     setattr(instance, model._meta.pk.attname, None)
                     return count, {model._meta.label: count}
 
-        async with async_atomic(using=self.using, savepoint=False):
+        async with aatomic(using=self.using, savepoint=False):
             # Send pre_delete signals
             for model, obj in self.instances_with_model():
                 if not model._meta.auto_created:
