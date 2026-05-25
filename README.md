@@ -1,9 +1,6 @@
 # Django Async Backend
 
 > **Note:** This is a fork of [Arfey/django-async-backend](https://github.com/Arfey/django-async-backend), developed with AI assistance to explore the remaining blockers for a fully async Django ORM. The goal is to identify what works, what doesn't, and hopefully contribute something useful upstream.
->
-> **Django core limitation** (not fixable in this package):
-> - **Connection lifecycle**: Django's `request_finished` signal closes sync connections only. ASGI deployments need the `close_async_connections` middleware (see below) to return async connections to the pool.
 
 ## Installation & Django Integration
 
@@ -26,19 +23,6 @@ DATABASES = {
 INSTALLED_APPS = [
     ...
     "django_async_backend",
-    ...
-]
-```
-
----
-
-## Middleware
-
-When running under ASGI, add `close_async_connections` to `MIDDLEWARE` so connections are returned to the pool at the end of each request. Django's `request_finished` signal only closes sync connections.
-
-```python
-MIDDLEWARE = [
-    "django_async_backend.middleware.close_async_connections",
     ...
 ]
 ```
@@ -103,8 +87,8 @@ class MyModel(AsyncModel, models.Model):
 
 | Method | Status | Notes |
 |--------|--------|-------|
-| `asave()` | Supported | Fires `pre_save`/`post_save` via `asend()` |
-| `adelete()` | Supported | CASCADE/SET_NULL/PROTECT/RESTRICT, fires `pre_delete`/`post_delete` |
+| `asave()` | Supported | Fires `pre_save`/`post_save` via `asend()` (Django's built-in `asave` uses sync signals) |
+| `adelete()` | Supported | CASCADE/SET_NULL/PROTECT/RESTRICT, fires `pre_delete`/`post_delete` via `asend()` |
 | `arefresh_from_db()` | Supported | |
 | `aget_next_by_FOO()` | Supported | Auto-generated for date/datetime fields |
 | `aget_previous_by_FOO()` | Supported | Auto-generated for date/datetime fields |
