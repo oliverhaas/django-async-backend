@@ -6,7 +6,7 @@ from django.utils.connection import BaseConnectionHandler
 
 class BaseAsyncConnectionHandler(BaseConnectionHandler):
     async def close_all(self):
-        await asyncio.gather(*[conn.close() for conn in self.all(initialized_only=True)])
+        await asyncio.gather(*[conn.aclose() for conn in self.all(initialized_only=True)])
 
     @asynccontextmanager
     async def _independent_connection(self):
@@ -28,7 +28,7 @@ class BaseAsyncConnectionHandler(BaseConnectionHandler):
                 self[conn.alias] = self.create_connection(conn.alias)
             yield
         finally:
-            close_task = asyncio.gather(*[conn.close() for conn in self.all()])
+            close_task = asyncio.gather(*[conn.aclose() for conn in self.all()])
 
             for conn in connections:
                 self[conn.alias] = conn

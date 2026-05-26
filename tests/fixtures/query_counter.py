@@ -10,7 +10,7 @@ async def async_capture_queries(using=DEFAULT_DB_ALIAS):
     connection = async_connections[using]
     old = connection.force_debug_cursor
     connection.force_debug_cursor = True
-    await connection.ensure_connection()
+    await connection.aensure_connection()
     initial = len(connection.queries_log)
     queries = []
     try:

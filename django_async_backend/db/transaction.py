@@ -103,7 +103,7 @@ class AsyncAtomic(AsyncContextDecorator):
             connection._task_connection_owner = id(asyncio.current_task())
             connection.commit_on_exit = True
             connection.needs_rollback = False
-            if not await connection.get_autocommit():
+            if not await connection.aget_autocommit():
                 # Pretend we're already in an atomic block to bypass the code
                 # that disables autocommit to enter a transaction, and make a
                 # note to deal with this case in __exit__.
@@ -116,12 +116,12 @@ class AsyncAtomic(AsyncContextDecorator):
             # second condition avoids creating useless savepoints and prevents
             # overwriting needs_rollback until the rollback is performed.
             if self.savepoint and not connection.needs_rollback:
-                sid = await connection.savepoint()
+                sid = await connection.asavepoint()
                 connection.savepoint_ids.append(sid)
             else:
                 connection.savepoint_ids.append(None)
         else:
-            await connection.set_autocommit(False, force_begin_transaction_with_broken_autocommit=True)
+            await connection.aset_autocommit(False, force_begin_transaction_with_broken_autocommit=True)
             connection.in_atomic_block = True
 
         if connection.in_atomic_block:
@@ -150,13 +150,13 @@ class AsyncAtomic(AsyncContextDecorator):
                     # Release savepoint if there is one
                     if sid is not None:
                         try:
-                            await connection.savepoint_commit(sid)
+                            await connection.asavepoint_commit(sid)
                         except DatabaseError:
                             try:
-                                await connection.savepoint_rollback(sid)
+                                await connection.asavepoint_rollback(sid)
                                 # The savepoint won't be reused. Release it to
                                 # minimize overhead for the database server.
-                                await connection.savepoint_commit(sid)
+                                await connection.asavepoint_commit(sid)
                             except Error:
                                 # If rolling back to a savepoint fails, mark for
                                 # rollback at a higher level and avoid shadowing
@@ -166,14 +166,14 @@ class AsyncAtomic(AsyncContextDecorator):
                 else:
                     # Commit transaction
                     try:
-                        await connection.commit()
+                        await connection.acommit()
                     except DatabaseError:
                         try:
-                            await connection.rollback()
+                            await connection.arollback()
                         except Error:
                             # An error during rollback means that something
                             # went wrong with the connection. Drop it.
-                            await connection.close()
+                            await connection.aclose()
                         raise
             else:
                 # This flag will be set to True again if there isn't a savepoint
@@ -186,10 +186,10 @@ class AsyncAtomic(AsyncContextDecorator):
                         connection.needs_rollback = True
                     else:
                         try:
-                            await connection.savepoint_rollback(sid)
+                            await connection.asavepoint_rollback(sid)
                             # The savepoint won't be reused. Release it to
                             # minimize overhead for the database server.
-                            await connection.savepoint_commit(sid)
+                            await connection.asavepoint_commit(sid)
                         except Error:
                             # If rolling back to a savepoint fails, mark for
                             # rollback at a higher level and avoid shadowing
@@ -198,11 +198,11 @@ class AsyncAtomic(AsyncContextDecorator):
                 else:
                     # Roll back transaction
                     try:
-                        await connection.rollback()
+                        await connection.arollback()
                     except Error:
                         # An error during rollback means that something
                         # went wrong with the connection. Drop it.
-                        await connection.close()
+                        await connection.aclose()
 
         finally:
             # Outermost block exit when autocommit was enabled.
@@ -210,7 +210,7 @@ class AsyncAtomic(AsyncContextDecorator):
                 if connection.closed_in_transaction:
                     connection.connection = None
                 else:
-                    await connection.set_autocommit(True)
+                    await connection.aset_autocommit(True)
             # Outermost block exit when autocommit was disabled.
             elif not connection.savepoint_ids and not connection.commit_on_exit:
                 if connection.closed_in_transaction:

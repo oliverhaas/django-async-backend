@@ -212,7 +212,7 @@ class RawQuery(DjangoRawQuery):
         else:
             raise RuntimeError("Unexpected params type: %s" % params_type)
 
-        self.cursor = await connection.cursor()
+        self.cursor = await connection.acursor()
         await self.cursor.execute(self.sql, params)
 
 

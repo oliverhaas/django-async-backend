@@ -17,7 +17,7 @@ default_settings = {
 class AsyncConnection:
     def __init__(self, alias):
         self.alias = alias
-        self.close = AsyncMock()
+        self.aclose = AsyncMock()
 
 
 class BaseAsyncConnectionHandlerExample(BaseAsyncConnectionHandler):
@@ -98,13 +98,13 @@ def test_all_initialized_only_empty_when_not_accessed(handler):
 async def test_close_all_closes_each_connection(handler):
     conn1 = handler["first"]
     conn2 = handler["second"]
-    conn1.close.assert_not_called()
-    conn2.close.assert_not_called()
+    conn1.aclose.assert_not_called()
+    conn2.aclose.assert_not_called()
 
     await handler.close_all()
 
-    conn1.close.assert_called_once_with()
-    conn2.close.assert_called_once_with()
+    conn1.aclose.assert_called_once_with()
+    conn2.aclose.assert_called_once_with()
 
 
 async def test_independent_connection_async_concurrent(handler):
@@ -123,7 +123,7 @@ async def test_independent_connection_async_concurrent(handler):
     assert len(connections_ids | {id(origin_conn)}) == 4
 
     for conn in connections:
-        conn.close.assert_called_once_with()
+        conn.aclose.assert_called_once_with()
 
     assert origin_conn == handler["first"]
 
@@ -155,7 +155,7 @@ async def test_independent_connection_nested(handler):
     assert len(connections_ids | {id(origin_conn)}) == 4
 
     for conn in connections:
-        conn.close.assert_called_once_with()
+        conn.aclose.assert_called_once_with()
 
     assert origin_conn == handler["first"]
 
@@ -164,8 +164,8 @@ async def test_independent_connection_with_exception():
     class AsyncConnectionWithException:
         def __init__(self, alias):
             self.alias = alias
-            self.close = AsyncMock()
-            self.close.side_effect = Exception
+            self.aclose = AsyncMock()
+            self.aclose.side_effect = Exception
 
     class BaseAsyncConnectionHandlerWithError(BaseAsyncConnectionHandlerExample):
         def create_connection(self, alias):
@@ -191,7 +191,7 @@ async def test_independent_connection_with_exception():
     assert len(connections_ids | {id(origin_conn)}) == 3
 
     for conn in connections:
-        conn.close.assert_called_once_with()
+        conn.aclose.assert_called_once_with()
 
     assert origin_conn == handler["first"]
 

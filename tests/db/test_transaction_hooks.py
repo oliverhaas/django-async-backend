@@ -37,7 +37,7 @@ async def hook_state(reporter_table_transaction):
     async def do(num):
         """Create a reporter and register an on_commit notification."""
         await _create_int_instance(num)
-        await async_connections[DEFAULT_DB_ALIAS].on_commit(lambda: notify(num))
+        await async_connections[DEFAULT_DB_ALIAS].aon_commit(lambda: notify(num))
 
     async def assert_done(nums):
         assert notified == nums
@@ -67,7 +67,7 @@ async def test_robust_if_no_transaction(hook_state, caplog):
         raise ForcedError("robust callback")
 
     with caplog.at_level(logging.ERROR, logger="django_async_backend.db.backends"):
-        await connection.on_commit(robust_callback, robust=True)
+        await connection.aon_commit(robust_callback, robust=True)
         await hook_state.do(1)
 
     await hook_state.assert_done([1])
@@ -87,7 +87,7 @@ async def test_robust_transaction(hook_state, caplog):
 
     with caplog.at_level(logging.ERROR, logger="django_async_backend.db.backends"):
         async with aatomic():
-            await connection.on_commit(robust_callback, robust=True)
+            await connection.aon_commit(robust_callback, robust=True)
             await hook_state.do(1)
 
     await hook_state.assert_done([1])
@@ -217,9 +217,9 @@ async def test_hooks_cleared_on_reconnect(hook_state):
 
     async with aatomic():
         await hook_state.do(1)
-        await connection.close()
+        await connection.aclose()
 
-    await connection.connect()
+    await connection.aconnect()
 
     async with aatomic():
         await hook_state.do(2)
@@ -232,7 +232,7 @@ async def test_error_in_hook_does_not_prevent_clearing_hooks(hook_state):
 
     with pytest.raises(ForcedError):
         async with aatomic():
-            await connection.on_commit(lambda: hook_state.notify("error"))
+            await connection.aon_commit(lambda: hook_state.notify("error"))
 
     async with aatomic():
         await hook_state.do(1)
@@ -248,7 +248,7 @@ async def test_db_query_in_hook(hook_state):
 
     async with aatomic():
         await _create_int_instance(1)
-        await connection.on_commit(commit)
+        await connection.aon_commit(commit)
 
     await hook_state.assert_done([1])
 
@@ -262,7 +262,7 @@ async def test_transaction_in_hook(hook_state):
             hook_state.notify(t)
 
     async with aatomic():
-        await connection.on_commit(on_commit)
+        await connection.aon_commit(on_commit)
 
     await hook_state.assert_done([1])
 
@@ -273,13 +273,13 @@ async def test_hook_in_hook(hook_state):
     async def on_commit(i, add_hook):
         async with aatomic():
             if add_hook:
-                await connection.on_commit(lambda: on_commit(i + 10, False))
+                await connection.aon_commit(lambda: on_commit(i + 10, False))
             t = await _create_int_instance(i)
             hook_state.notify(t)
 
     async with aatomic():
-        await connection.on_commit(lambda: on_commit(1, True))
-        await connection.on_commit(lambda: on_commit(2, True))
+        await connection.aon_commit(lambda: on_commit(1, True))
+        await connection.aon_commit(lambda: on_commit(2, True))
 
     await hook_state.assert_done([1, 11, 2, 12])
 
@@ -291,17 +291,17 @@ async def test_raises_exception_non_autocommit_mode(reporter_table_transaction):
         raise AssertionError("this function should never be called")
 
     try:
-        await connection.set_autocommit(False)
+        await connection.aset_autocommit(False)
         with pytest.raises(
             transaction.TransactionManagementError,
             match="cannot be used in manual transaction management",
         ):
-            await connection.on_commit(should_never_be_called)
+            await connection.aon_commit(should_never_be_called)
     finally:
-        await connection.set_autocommit(True)
+        await connection.aset_autocommit(True)
 
 
 async def test_raises_exception_non_callable(reporter_table_transaction):
     connection = async_connections[DEFAULT_DB_ALIAS]
     with pytest.raises(TypeError, match="callback must be a callable"):
-        await connection.on_commit(None)
+        await connection.aon_commit(None)

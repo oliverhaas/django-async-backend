@@ -39,7 +39,7 @@ class TestCloseAsyncConnections:
         async def get_response(request):
             # Open a connection by executing a query
             connection = async_connections[DEFAULT_DB_ALIAS]
-            async with await connection.cursor() as cursor:
+            async with await connection.acursor() as cursor:
                 await cursor.execute("SELECT 1")
             return HttpResponse("ok")
 
@@ -57,7 +57,7 @@ class TestCloseAsyncConnections:
 
         async def get_response(request):
             connection = async_connections[DEFAULT_DB_ALIAS]
-            async with await connection.cursor() as cursor:
+            async with await connection.acursor() as cursor:
                 await cursor.execute("SELECT 1")
             raise RuntimeError("view error")
 
@@ -76,8 +76,8 @@ class TestCloseAsyncConnections:
             request = rf.get("/")
 
             async def get_response(request):
-                await new_connection.connect()
-                async with await new_connection.cursor() as cursor:
+                await new_connection.aconnect()
+                async with await new_connection.acursor() as cursor:
                     await cursor.execute("SELECT 1")
                 return HttpResponse("ok")
 
@@ -88,16 +88,16 @@ class TestCloseAsyncConnections:
             assert new_connection.connection is not None
 
             # Closing returns it to the pool
-            await new_connection.close()
+            await new_connection.aclose()
             assert new_connection.connection is None
 
             # We can get a new connection (pool not exhausted)
-            await new_connection.connect()
-            async with await new_connection.cursor() as cursor:
+            await new_connection.aconnect()
+            async with await new_connection.acursor() as cursor:
                 await cursor.execute("SELECT 1")
             assert new_connection.connection is not None
         finally:
-            await new_connection.close()
+            await new_connection.aclose()
             await new_connection.close_pool()
 
     @pytest.mark.asyncio
@@ -114,16 +114,16 @@ class TestCloseAsyncConnections:
 
         try:
             # Check out the only connection
-            await new_connection.connect()
-            async with await new_connection.cursor() as cursor:
+            await new_connection.aconnect()
+            async with await new_connection.acursor() as cursor:
                 await cursor.execute("SELECT 1")
 
             # Try to get another connection from the same pool. Should timeout.
             conn2 = new_connection.copy()
             with pytest.raises(PoolTimeout):
-                await conn2.connect()
+                await conn2.aconnect()
         finally:
-            await new_connection.close()
+            await new_connection.aclose()
             await new_connection.close_pool()
 
     @pytest.mark.asyncio

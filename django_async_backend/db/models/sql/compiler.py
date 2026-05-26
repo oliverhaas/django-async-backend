@@ -684,9 +684,9 @@ class SQLCompiler(DjangoSQLCompiler):
                 return []
             return None
         if chunked_fetch:
-            cursor = await self.connection.chunked_cursor()
+            cursor = await self.connection.achunked_cursor()
         else:
-            cursor = await self.connection.cursor()
+            cursor = await self.connection.acursor()
         try:
             await cursor.execute(sql, params)
         except Exception:
@@ -854,7 +854,7 @@ class SQLInsertCompiler(DjangoSQLInsertCompiler, SQLCompiler):
         opts = self.query.get_meta()
         self.returning_fields = returning_fields
         cols = []
-        async with await self.connection.cursor() as cursor:
+        async with await self.connection.acursor() as cursor:
             for sql, params in self.as_sql():
                 await cursor.execute(sql, params)
             if not self.returning_fields:
@@ -948,7 +948,7 @@ class SQLUpdateCompiler(DjangoSQLUpdateCompiler, SQLCompiler):
             return [()] * row_count
 
         self.returning_fields = returning_fields
-        async with await self.connection.cursor() as cursor:
+        async with await self.connection.acursor() as cursor:
             sql, params = self.as_sql()
             await cursor.execute(sql, params)
             rows = await self.connection.ops.fetch_returned_rows(cursor, self.returning_params)

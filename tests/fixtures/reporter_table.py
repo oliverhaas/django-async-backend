@@ -10,7 +10,7 @@ from django_async_backend.db import async_connections
 async def truncate_reporter_table():
     """Wipe the table outside of any transaction. Used by the
     reporter_table_transaction fixture for cleanup between tests."""
-    async with await async_connections[DEFAULT_DB_ALIAS].cursor() as cursor:
+    async with await async_connections[DEFAULT_DB_ALIAS].acursor() as cursor:
         await cursor.execute("TRUNCATE TABLE reporter_table_tmp RESTART IDENTITY;")
 
 

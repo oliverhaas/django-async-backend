@@ -94,25 +94,25 @@ async def test_connect_and_rollback():
     """SET TIME ZONE is not rolled back after rollback (#17062)."""
     new_connection = _no_pool_connection()
     try:
-        async with await new_connection.cursor() as cursor:
+        async with await new_connection.acursor() as cursor:
             await cursor.execute("RESET TIMEZONE")
             await cursor.execute("SHOW TIMEZONE")
             db_default_tz = (await cursor.fetchone())[0]
         new_tz = "Europe/Paris" if db_default_tz == "UTC" else "UTC"
-        await new_connection.close()
+        await new_connection.aclose()
 
         del new_connection.timezone_name
 
         with override_settings(TIME_ZONE=new_tz):
-            await new_connection.set_autocommit(False)
-            await new_connection.rollback()
+            await new_connection.aset_autocommit(False)
+            await new_connection.arollback()
 
-            async with await new_connection.cursor() as cursor:
+            async with await new_connection.acursor() as cursor:
                 await cursor.execute("SHOW TIMEZONE")
                 tz = (await cursor.fetchone())[0]
             assert new_tz == tz
     finally:
-        await new_connection.close()
+        await new_connection.aclose()
 
 
 async def test_connect_non_autocommit():
@@ -120,10 +120,10 @@ async def test_connect_non_autocommit():
     new_connection = _no_pool_connection()
     new_connection.settings_dict["AUTOCOMMIT"] = False
     try:
-        async with await new_connection.cursor():
-            assert not await new_connection.get_autocommit()
+        async with await new_connection.acursor():
+            assert not await new_connection.aget_autocommit()
     finally:
-        await new_connection.close()
+        await new_connection.aclose()
 
 
 # ── Connection pooling ────────────────────────────────────────────────
@@ -144,7 +144,7 @@ async def test_connect_pool():
 
     async def get_connection():
         conn = new_connection.copy()
-        await conn.connect()
+        await conn.aconnect()
         connections.append(conn)
         return conn
 
@@ -155,12 +155,12 @@ async def test_connect_pool():
         with pytest.raises(PoolTimeout):
             await get_connection()
 
-        await connection_1.close()
+        await connection_1.aclose()
         connection_3 = await get_connection()
         assert connection_3.connection.info.backend_pid == connection_1_backend_pid
     finally:
         for conn in connections:
-            await conn.close()
+            await conn.aclose()
         await new_connection.close_pool()
 
 
@@ -178,23 +178,23 @@ async def test_connect_pool_with_timezone():
     new_connection = _no_pool_connection(alias="default_pool")
 
     try:
-        async with await new_connection.cursor() as cursor:
+        async with await new_connection.acursor() as cursor:
             await cursor.execute("SHOW TIMEZONE")
             tz = (await cursor.fetchone())[0]
             assert new_time_zone != tz
     finally:
-        await new_connection.close()
+        await new_connection.aclose()
 
     del new_connection.timezone_name
     new_connection.settings_dict["OPTIONS"]["pool"] = True
     try:
         with override_settings(TIME_ZONE=new_time_zone):
-            async with await new_connection.cursor() as cursor:
+            async with await new_connection.acursor() as cursor:
                 await cursor.execute("SHOW TIMEZONE")
                 tz = (await cursor.fetchone())[0]
                 assert new_time_zone == tz
     finally:
-        await new_connection.close()
+        await new_connection.aclose()
         await new_connection.close_pool()
 
 
@@ -220,7 +220,7 @@ async def test_cannot_open_new_connection_in_atomic_block():
     new_connection.in_atomic_block = True
     new_connection.closed_in_transaction = True
     with pytest.raises(ProgrammingError, match="Cannot open a new connection in an atomic block."):
-        await new_connection.ensure_connection()
+        await new_connection.aensure_connection()
 
 
 async def test_pooling_not_support_persistent_connections():
@@ -244,10 +244,10 @@ async def test_connect_isolation_level(async_db):
     new_connection = _no_pool_connection()
     new_connection.settings_dict["OPTIONS"]["isolation_level"] = IsolationLevel.SERIALIZABLE
     try:
-        await new_connection.set_autocommit(False)
+        await new_connection.aset_autocommit(False)
         assert new_connection.connection.isolation_level == IsolationLevel.SERIALIZABLE
     finally:
-        await new_connection.close()
+        await new_connection.aclose()
 
 
 async def test_connect_invalid_isolation_level(async_db):
@@ -258,7 +258,7 @@ async def test_connect_invalid_isolation_level(async_db):
     new_connection.settings_dict["OPTIONS"]["isolation_level"] = -1
     msg = "Invalid transaction isolation level -1 specified. Use one of the psycopg.IsolationLevel values."
     with pytest.raises(ImproperlyConfigured, match=msg):
-        await new_connection.ensure_connection()
+        await new_connection.aensure_connection()
 
 
 # ── Role and cursor options ──────────────────────────────────────────
@@ -271,9 +271,9 @@ async def test_connect_role():
     new_connection.settings_dict["OPTIONS"]["assume_role"] = custom_role
     try:
         with pytest.raises(errors.InvalidParameterValue, match=f'role "{custom_role}" does not exist'):
-            await new_connection.connect()
+            await new_connection.aconnect()
     finally:
-        await new_connection.close()
+        await new_connection.aclose()
 
 
 async def test_connect_server_side_binding():
@@ -283,10 +283,10 @@ async def test_connect_server_side_binding():
     new_connection = _no_pool_connection()
     new_connection.settings_dict["OPTIONS"]["server_side_binding"] = True
     try:
-        await new_connection.connect()
+        await new_connection.aconnect()
         assert new_connection.connection.cursor_factory == AsyncServerBindingCursor
     finally:
-        await new_connection.close()
+        await new_connection.aclose()
 
 
 async def test_connect_custom_cursor_factory():
@@ -299,30 +299,30 @@ async def test_connect_custom_cursor_factory():
     new_connection = _no_pool_connection()
     new_connection.settings_dict["OPTIONS"]["cursor_factory"] = MyCursor
     try:
-        await new_connection.connect()
+        await new_connection.aconnect()
         assert new_connection.connection.cursor_factory == MyCursor
     finally:
-        await new_connection.close()
+        await new_connection.aclose()
 
 
 async def test_connect_no_is_usable_checks():
     new_connection = _no_pool_connection()
     try:
-        with mock.patch.object(new_connection, "is_usable") as is_usable:
-            await new_connection.connect()
+        with mock.patch.object(new_connection, "ais_usable") as is_usable:
+            await new_connection.aconnect()
         is_usable.assert_not_called()
     finally:
-        await new_connection.close()
+        await new_connection.aclose()
 
 
 async def test_client_encoding_utf8_enforce():
     new_connection = _no_pool_connection()
     new_connection.settings_dict["OPTIONS"]["client_encoding"] = "iso-8859-2"
     try:
-        await new_connection.connect()
+        await new_connection.aconnect()
         assert new_connection.connection.info.encoding == "utf-8"
     finally:
-        await new_connection.close()
+        await new_connection.aclose()
 
 
 # ── Type handling ────────────────────────────────────────────────────
@@ -330,7 +330,7 @@ async def test_client_encoding_utf8_enforce():
 
 async def _select_val(val):
     connection = async_connections[DEFAULT_DB_ALIAS]
-    async with await connection.cursor() as cursor:
+    async with await connection.acursor() as cursor:
         await cursor.execute("SELECT %s::text[]", (val,))
         return (await cursor.fetchone())[0]
 
@@ -385,7 +385,7 @@ async def test_copy_cursors(reporter_table_transaction):
     await insert_reporter(2)
 
     copy_sql = "COPY reporter_table_tmp TO STDOUT (FORMAT CSV, HEADER)"
-    async with await connection.cursor() as cursor:
+    async with await connection.acursor() as cursor:
         async for row in cursor.copy(copy_sql):
             pass
 
@@ -394,26 +394,26 @@ async def test_copy_cursors(reporter_table_transaction):
 
 async def test_get_database_version():
     new_connection = _no_pool_connection()
-    version = await new_connection.get_database_version()
+    version = await new_connection.aget_database_version()
     assert len(version) == 2
-    assert (await new_connection.get_database_version())[0] == 15
+    assert (await new_connection.aget_database_version())[0] == 15
 
 
 async def test_check_database_version_supported():
     from django_async_backend.db.backends.postgresql.base import AsyncDatabaseWrapper
 
     class CustomAsyncDatabaseWrapper(AsyncDatabaseWrapper):
-        async def get_database_version(self):
+        async def aget_database_version(self):
             return (13,)
 
     new_connection = _no_pool_connection()
     try:
-        await new_connection.connect()
+        await new_connection.aconnect()
         settings = new_connection.settings_dict.copy()
         with pytest.raises(NotSupportedError, match=r"PostgreSQL 14 or later is required \(found 13\)."):
-            await CustomAsyncDatabaseWrapper(settings).check_database_version_supported()
+            await CustomAsyncDatabaseWrapper(settings).acheck_database_version_supported()
     finally:
-        await new_connection.close()
+        await new_connection.aclose()
 
 
 async def test_compose_sql_when_no_connection():
@@ -422,13 +422,13 @@ async def test_compose_sql_when_no_connection():
         result = await new_connection.ops.compose_sql("SELECT %s", ["test"])
         assert result == "SELECT 'test'"
     finally:
-        await new_connection.close()
+        await new_connection.aclose()
 
 
 async def _run_timezone_configuration(Wrapper, expected_commit):
     new_connection = _no_pool_connection()
     try:
-        async with await new_connection.cursor() as cursor:
+        async with await new_connection.acursor() as cursor:
             await cursor.execute("RESET TIMEZONE")
             await cursor.execute("SHOW TIMEZONE")
             db_default_tz = (await cursor.fetchone())[0]
@@ -440,7 +440,7 @@ async def _run_timezone_configuration(Wrapper, expected_commit):
         result = await Wrapper(settings)._configure_connection(conn)
         assert result is expected_commit
     finally:
-        await new_connection.close()
+        await new_connection.aclose()
 
 
 async def test_configure_timezone_commits_when_changed():
@@ -468,14 +468,14 @@ async def test_bypass_role_configuration():
 
     new_connection = _no_pool_connection()
     try:
-        await new_connection.connect()
+        await new_connection.aconnect()
         settings = new_connection.settings_dict.copy()
         settings["OPTIONS"]["assume_role"] = "django_nonexistent_role"
         conn = new_connection.connection
         result = await CustomAsyncDatabaseWrapper(settings)._configure_connection(conn)
         assert result is False
     finally:
-        await new_connection.close()
+        await new_connection.aclose()
 
 
 # ── Server-side cursors ──────────────────────────────────────────────
@@ -495,7 +495,7 @@ async def reporter_table_with_data(async_db):
 
 async def _inspect_cursors():
     connection = async_connections[DEFAULT_DB_ALIAS]
-    async with await connection.cursor() as cursor:
+    async with await connection.acursor() as cursor:
         await cursor.execute(f"SELECT {_CURSOR_FIELDS} FROM pg_cursors;")
         cursors = await cursor.fetchall()
     return [_PostgresCursor._make(c) for c in cursors]

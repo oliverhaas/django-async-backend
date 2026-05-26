@@ -69,7 +69,7 @@ async def _add_tag_articles(tag, articles):
     through = Tag.articles.through
     table = through._meta.db_table
     conn = async_connections[DEFAULT_DB_ALIAS]
-    async with await conn.cursor() as cursor:
+    async with await conn.acursor() as cursor:
         for article in articles:
             await cursor.execute(
                 f'INSERT INTO "{table}" (tag_id, article_id) VALUES (%s, %s)',
@@ -455,7 +455,8 @@ async def test_in_bulk_values_list_named_fields(lookup_data):
 async def test_in_bulk_values_list_named_fields_alternative_field(lookup_data):
     d = lookup_data
     arts = await Article.async_object.values_list("headline", named=True).ain_bulk(
-        [d.a1.slug, d.a2.slug], field_name="slug"
+        [d.a1.slug, d.a2.slug],
+        field_name="slug",
     )
     assert len(arts) == 2
     arts1 = arts[d.a1.slug]
@@ -595,7 +596,7 @@ async def test_values_extra(lookup_data):
             "id_plus_six": d.a1.id + 6,
             "id_plus_seven": d.a1.id + 7,
             "id_plus_eight": d.a1.id + 8,
-        }
+        },
     ]
 
 
@@ -626,7 +627,9 @@ async def test_values_relations(lookup_data):
     results = [
         r
         async for r in Author.async_object.values("name", "article__headline", "article__tag__name").order_by(
-            "name", "article__headline", "article__tag__name"
+            "name",
+            "article__headline",
+            "article__tag__name",
         )
     ]
     assert results == [
@@ -661,7 +664,7 @@ async def test_values_no_field_names(lookup_data):
             "headline": "Article 5",
             "pub_date": datetime(2005, 8, 1, 9, 0),
             "slug": "a5",
-        }
+        },
     ]
 
 
@@ -1039,7 +1042,7 @@ async def test_regex(async_db):
             Article(pub_date=now, headline="AbBa"),
             Article(pub_date=now, headline="baz"),
             Article(pub_date=now, headline="baxZ"),
-        ]
+        ],
     )
 
     def headlines(qs_results):
@@ -1049,37 +1052,37 @@ async def test_regex(async_db):
         return [a async for a in qs]
 
     assert headlines(await rlist(Article.async_object.filter(headline__regex=r"fo*"))) == headlines(
-        await rlist(Article.async_object.filter(headline__in=["f", "fo", "foo", "fooo"]))
+        await rlist(Article.async_object.filter(headline__in=["f", "fo", "foo", "fooo"])),
     )
     assert headlines(await rlist(Article.async_object.filter(headline__iregex=r"fo*"))) == headlines(
-        await rlist(Article.async_object.filter(headline__in=["f", "fo", "foo", "fooo", "hey-Foo"]))
+        await rlist(Article.async_object.filter(headline__in=["f", "fo", "foo", "fooo", "hey-Foo"])),
     )
     assert headlines(await rlist(Article.async_object.filter(headline__regex=r"fo+"))) == headlines(
-        await rlist(Article.async_object.filter(headline__in=["fo", "foo", "fooo"]))
+        await rlist(Article.async_object.filter(headline__in=["fo", "foo", "fooo"])),
     )
     assert headlines(await rlist(Article.async_object.filter(headline__regex=r"fooo?"))) == headlines(
-        await rlist(Article.async_object.filter(headline__in=["foo", "fooo"]))
+        await rlist(Article.async_object.filter(headline__in=["foo", "fooo"])),
     )
     assert headlines(await rlist(Article.async_object.filter(headline__regex=r"^b"))) == headlines(
-        await rlist(Article.async_object.filter(headline__in=["bar", "baxZ", "baz"]))
+        await rlist(Article.async_object.filter(headline__in=["bar", "baxZ", "baz"])),
     )
     assert headlines(await rlist(Article.async_object.filter(headline__iregex=r"^a"))) == headlines(
-        await rlist(Article.async_object.filter(headline="AbBa"))
+        await rlist(Article.async_object.filter(headline="AbBa")),
     )
     assert headlines(await rlist(Article.async_object.filter(headline__regex=r"z$"))) == headlines(
-        await rlist(Article.async_object.filter(headline="baz"))
+        await rlist(Article.async_object.filter(headline="baz")),
     )
     assert headlines(await rlist(Article.async_object.filter(headline__iregex=r"z$"))) == headlines(
-        await rlist(Article.async_object.filter(headline__in=["baxZ", "baz"]))
+        await rlist(Article.async_object.filter(headline__in=["baxZ", "baz"])),
     )
     assert headlines(await rlist(Article.async_object.filter(headline__regex=r"ba[rz]"))) == headlines(
-        await rlist(Article.async_object.filter(headline__in=["bar", "baz"]))
+        await rlist(Article.async_object.filter(headline__in=["bar", "baz"])),
     )
     assert headlines(await rlist(Article.async_object.filter(headline__regex=r"ba.[RxZ]"))) == headlines(
-        await rlist(Article.async_object.filter(headline="baxZ"))
+        await rlist(Article.async_object.filter(headline="baxZ")),
     )
     assert headlines(await rlist(Article.async_object.filter(headline__iregex=r"ba[RxZ]"))) == headlines(
-        await rlist(Article.async_object.filter(headline__in=["bar", "baxZ", "baz"]))
+        await rlist(Article.async_object.filter(headline__in=["bar", "baxZ", "baz"])),
     )
 
     await Article.async_object.abulk_create(
@@ -1091,24 +1094,24 @@ async def test_regex(async_db):
             Article(pub_date=now, headline="zoocarfaz"),
             Article(pub_date=now, headline="barfoobaz"),
             Article(pub_date=now, headline="bazbaRFOO"),
-        ]
+        ],
     )
 
     assert headlines(await rlist(Article.async_object.filter(headline__regex=r"oo(f|b)"))) == headlines(
-        await rlist(Article.async_object.filter(headline__in=["barfoobaz", "foobar", "foobarbaz", "foobaz"]))
+        await rlist(Article.async_object.filter(headline__in=["barfoobaz", "foobar", "foobarbaz", "foobaz"])),
     )
     assert headlines(await rlist(Article.async_object.filter(headline__iregex=r"oo(f|b)"))) == headlines(
-        await rlist(Article.async_object.filter(headline__in=["barfoobaz", "foobar", "foobarbaz", "foobaz", "ooF"]))
+        await rlist(Article.async_object.filter(headline__in=["barfoobaz", "foobar", "foobarbaz", "foobaz", "ooF"])),
     )
     assert headlines(await rlist(Article.async_object.filter(headline__regex=r"^foo(f|b)"))) == headlines(
-        await rlist(Article.async_object.filter(headline__in=["foobar", "foobarbaz", "foobaz"]))
+        await rlist(Article.async_object.filter(headline__in=["foobar", "foobarbaz", "foobaz"])),
     )
 
     assert headlines(await rlist(Article.async_object.filter(headline__regex=r"b.*az"))) == headlines(
-        await rlist(Article.async_object.filter(headline__in=["barfoobaz", "baz", "bazbaRFOO", "foobarbaz", "foobaz"]))
+        await rlist(Article.async_object.filter(headline__in=["barfoobaz", "baz", "bazbaRFOO", "foobarbaz", "foobaz"])),
     )
     assert headlines(await rlist(Article.async_object.filter(headline__iregex=r"b.*ar"))) == headlines(
-        await rlist(Article.async_object.filter(headline__in=["bar", "barfoobaz", "bazbaRFOO", "foobar", "foobarbaz"]))
+        await rlist(Article.async_object.filter(headline__in=["bar", "barfoobaz", "bazbaRFOO", "foobar", "foobarbaz"])),
     )
 
 
@@ -1125,7 +1128,7 @@ async def test_regex_backreferencing(async_db):
             Article(pub_date=now, headline="zoocarfaz"),
             Article(pub_date=now, headline="barfoobaz"),
             Article(pub_date=now, headline="bazbaRFOO"),
-        ]
+        ],
     )
     results = [
         r async for r in Article.async_object.filter(headline__regex=r"b(.).*b\1").values_list("headline", flat=True)
@@ -1186,7 +1189,7 @@ async def _add_player_games(player, game_ids):
     through = Player.games.through
     table = through._meta.db_table
     conn = async_connections[DEFAULT_DB_ALIAS]
-    async with await conn.cursor() as cursor:
+    async with await conn.acursor() as cursor:
         for gid in game_ids:
             await cursor.execute(
                 f'INSERT INTO "{table}" (player_id, game_id) VALUES (%s, %s)',
@@ -1375,7 +1378,7 @@ async def test_nested_outerref_lhs(lookup_data):
         has_author_alias_match=Exists(
             Article.async_object.annotate(
                 author_exists=Exists(Author.async_object.filter(alias=OuterRef(OuterRef("name")))),
-            ).filter(author_exists=True)
+            ).filter(author_exists=True),
         ),
     )
     result = await qs.aget(has_author_alias_match=True)
@@ -1431,7 +1434,7 @@ async def test_lookup_rhs(async_db):
             short=ExpressionWrapper(
                 Q(qty_available__lt=F("product__qty_target")),
                 output_field=BooleanField(),
-            )
+            ),
         )
     }
     assert results2 == {stock_1.pk, stock_2.pk}
@@ -1585,7 +1588,7 @@ async def test_lq_filter_wrapped_lookup_lhs(lookup_querying_data):
 async def test_lq_filter_exists_lhs(lookup_querying_data):
     d = lookup_querying_data
     qs = Season.async_object.annotate(
-        before_20=Exists(Season.async_object.filter(pk=OuterRef("pk"), year__lt=2000))
+        before_20=Exists(Season.async_object.filter(pk=OuterRef("pk"), year__lt=2000)),
     ).filter(before_20=LessThan(F("year"), 1900))
     results = [s async for s in qs]
     assert sorted(s.pk for s in results) == sorted(s.pk for s in [d.s2, d.s3])
@@ -1594,7 +1597,7 @@ async def test_lq_filter_exists_lhs(lookup_querying_data):
 async def test_lq_filter_subquery_lhs(lookup_querying_data):
     d = lookup_querying_data
     qs = Season.async_object.annotate(
-        before_20=Subquery(Season.async_object.filter(pk=OuterRef("pk")).values(lesser=LessThan(F("year"), 2000)))
+        before_20=Subquery(Season.async_object.filter(pk=OuterRef("pk")).values(lesser=LessThan(F("year"), 2000))),
     ).filter(before_20=LessThan(F("year"), 1900))
     results = [s async for s in qs]
     assert sorted(s.pk for s in results) == sorted(s.pk for s in [d.s2, d.s3])
@@ -1647,7 +1650,7 @@ async def test_lq_conditional_expression(lookup_querying_data):
                 then=Value("20th"),
             ),
             default=Value("other"),
-        )
+        ),
     ).values("year", "century")
     results = [r async for r in qs]
     expected = [

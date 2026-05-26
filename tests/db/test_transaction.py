@@ -93,12 +93,12 @@ async def _in_atomic_mode(reporter_table_transaction, request):
             await atomic.__aexit__(*sys.exc_info())
     else:  # without_autocommit
         connection = async_connections[DEFAULT_DB_ALIAS]
-        await connection.set_autocommit(False)
+        await connection.aset_autocommit(False)
         try:
             yield
         finally:
-            await connection.rollback()
-            await connection.set_autocommit(True)
+            await connection.arollback()
+            await connection.aset_autocommit(True)
 
 
 async def test_decorator_syntax_commit(_in_atomic_mode):
@@ -292,14 +292,14 @@ async def test_prevent_rollback(_in_atomic_mode):
     connection = async_connections[DEFAULT_DB_ALIAS]
     async with aatomic():
         reporter = await insert_reporter(1)
-        sid = await connection.savepoint()
+        sid = await connection.asavepoint()
         with pytest.raises(DatabaseError):
             async with aatomic(savepoint=False):
-                async with await connection.cursor() as cursor:
+                async with await connection.acursor() as cursor:
                     await cursor.execute("SELECT no_such_col FROM reporter_table_tmp")
         assert connection.get_rollback()
         connection.set_rollback(False)
-        await connection.savepoint_rollback(sid)
+        await connection.asavepoint_rollback(sid)
     assert await fetch_all_reporters() == [reporter]
 
 
@@ -378,21 +378,21 @@ _FORBIDDEN_ATOMIC_MSG = "This is forbidden when an 'atomic' block is active."
 
 async def test_atomic_prevents_setting_autocommit(reporter_table_transaction):
     connection = async_connections[DEFAULT_DB_ALIAS]
-    autocommit = await connection.get_autocommit()
+    autocommit = await connection.aget_autocommit()
     async with aatomic():
         with pytest.raises(transaction.TransactionManagementError, match=_FORBIDDEN_ATOMIC_MSG):
-            await connection.set_autocommit(not autocommit)
+            await connection.aset_autocommit(not autocommit)
 
-    assert await connection.get_autocommit() == autocommit
+    assert await connection.aget_autocommit() == autocommit
 
 
 async def test_atomic_prevents_calling_transaction_methods(reporter_table_transaction):
     connection = async_connections[DEFAULT_DB_ALIAS]
     async with aatomic():
         with pytest.raises(transaction.TransactionManagementError, match=_FORBIDDEN_ATOMIC_MSG):
-            await connection.commit()
+            await connection.acommit()
         with pytest.raises(transaction.TransactionManagementError, match=_FORBIDDEN_ATOMIC_MSG):
-            await connection.rollback()
+            await connection.arollback()
 
 
 async def test_atomic_prevents_queries_in_broken_transaction(reporter_table_transaction):
@@ -421,7 +421,7 @@ async def test_atomic_prevents_queries_in_broken_transaction_after_client_close(
 
     async with aatomic():
         await insert_reporter(1)
-        await connection.close()
+        await connection.aclose()
         with pytest.raises(Error):
             await insert_reporter(2)
     assert len(await fetch_all_reporters()) == 0
@@ -433,12 +433,12 @@ async def test_atomic_prevents_queries_in_broken_transaction_after_client_close(
 @pytest.fixture
 async def non_autocommit_mode(reporter_table_transaction):
     connection = async_connections[DEFAULT_DB_ALIAS]
-    await connection.set_autocommit(False)
+    await connection.aset_autocommit(False)
     try:
         yield
     finally:
-        await connection.rollback()
-        await connection.set_autocommit(True)
+        await connection.arollback()
+        await connection.aset_autocommit(True)
 
 
 async def test_orm_query_after_error_and_rollback(non_autocommit_mode):
@@ -448,7 +448,7 @@ async def test_orm_query_after_error_and_rollback(non_autocommit_mode):
     await insert_reporter(1)
     with pytest.raises(IntegrityError):
         await insert_reporter(1)
-    await connection.rollback()
+    await connection.arollback()
     await fetch_all_reporters()
 
 
@@ -613,7 +613,7 @@ async def test_atomic_does_not_leak_savepoints_on_failure(reporter_table_transac
                     sid = connection.savepoint_ids[-1]
                     raise Exception("Oops")
             # The savepoint no longer exists; rolling back to it must fail.
-            await connection.savepoint_rollback(sid)
+            await connection.asavepoint_rollback(sid)
 
 
 async def test_mark_for_rollback_on_error_in_transaction(reporter_table_transaction):
@@ -639,7 +639,7 @@ async def test_mark_for_rollback_on_error_in_transaction(reporter_table_transact
 
 async def test_mark_for_rollback_on_error_in_autocommit(reporter_table_transaction):
     connection = async_connections[DEFAULT_DB_ALIAS]
-    assert await connection.get_autocommit() is True
+    assert await connection.aget_autocommit() is True
 
     with pytest.raises(Exception, match="Oops"):
         async with async_mark_for_rollback_on_error():

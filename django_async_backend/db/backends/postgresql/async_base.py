@@ -32,7 +32,7 @@ TIMESTAMPTZ_OID = Database.adapters.types["timestamptz"].oid
 
 
 async def async_mogrify(sql, params, connection):
-    async with await connection.cursor() as cursor:
+    async with await connection.acursor() as cursor:
         return AsyncCursor(cursor.connection).mogrify(sql, params)
 
 
@@ -94,7 +94,7 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
                 from psycopg_pool import AsyncConnectionPool
             except ImportError as err:
                 raise ImproperlyConfigured(
-                    "Error loading psycopg_pool module.\nDid you install psycopg[pool]?"
+                    "Error loading psycopg_pool module.\nDid you install psycopg[pool]?",
                 ) from err
 
             connect_kwargs = self.get_connection_params()
@@ -121,7 +121,7 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
             await self.pool.close()
             del self._connection_pools[self.alias]
 
-    async def get_database_version(self):
+    async def aget_database_version(self):
         """
         Return a tuple of the database's version.
         E.g. for pg_version 120004, return (12, 4).
@@ -133,7 +133,7 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
         # None may be used to connect to the default 'postgres' db
         if settings_dict["NAME"] == "" and not settings_dict["OPTIONS"].get("service"):
             raise ImproperlyConfigured(
-                "settings.DATABASES is improperly configured. Please supply the NAME or OPTIONS['service'] value."
+                "settings.DATABASES is improperly configured. Please supply the NAME or OPTIONS['service'] value.",
             )
         if len(settings_dict["NAME"] or "") > self.ops.max_name_length():
             raise ImproperlyConfigured(
@@ -144,7 +144,7 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
                     settings_dict["NAME"],
                     len(settings_dict["NAME"]),
                     self.ops.max_name_length(),
-                )
+                ),
             )
         if settings_dict["NAME"]:
             conn_params = {
@@ -184,7 +184,7 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
 
         return conn_params
 
-    async def get_new_connection(self, conn_params):
+    async def aget_new_connection(self, conn_params):
         # self.isolation_level must be set:
         # - after connecting to the database in order to obtain the database's
         #   default when no value is explicitly specified in options.
@@ -205,7 +205,7 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
                 raise ImproperlyConfigured(
                     "Invalid transaction isolation "
                     f"level {isolation_level_value} specified. Use one of the"
-                    " psycopg.IsolationLevel values."
+                    " psycopg.IsolationLevel values.",
                 )
         if self.pool:
             # If nothing else has opened the pool, open it now.
@@ -218,7 +218,7 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
 
         return connection
 
-    async def ensure_timezone(self):
+    async def aensure_timezone(self):
         # Close the pool so new connections pick up the correct timezone.
         await self.close_pool()
         if self.connection is None:
@@ -255,7 +255,7 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
 
         return commit_role or commit_tz
 
-    async def _close(self):
+    async def _aclose(self):
         if self.connection is not None:
             # `wrap_database_errors` only works for `putconn` as long as there
             # is no `reset` function set in the pool because it is deferred
@@ -271,13 +271,13 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
                 else:
                     return await self.connection.close()
 
-    async def init_connection_state(self):
-        await super().init_connection_state()
+    async def ainit_connection_state(self):
+        await super().ainit_connection_state()
 
         if self.connection is not None and not self.pool:
             commit = await self._configure_connection(self.connection)
 
-            if commit and not await self.get_autocommit():
+            if commit and not await self.aget_autocommit():
                 await self.connection.commit()
 
     def create_cursor(self, name=None):
@@ -314,7 +314,7 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
     def tzinfo_factory(self, offset):
         return self.timezone
 
-    def chunked_cursor(self):
+    def achunked_cursor(self):
         self._named_cursor_idx += 1
         # Get the current async task
         # Note that right now this is behind @async_unsafe, so this is
@@ -331,21 +331,21 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
         else:
             task_ident = "sync"
         # Use that and the thread ident to get a unique name
-        return self._cursor(
+        return self._acursor(
             name="_django_curs_%d_%s_%d"
             % (
                 # Avoid reusing name in other threads / tasks
                 threading.current_thread().ident,
                 task_ident,
                 self._named_cursor_idx,
-            )
+            ),
         )
 
-    async def _set_autocommit(self, autocommit):
+    async def _aset_autocommit(self, autocommit):
         with self.wrap_database_errors:
             await self.connection.set_autocommit(autocommit)
 
-    async def is_usable(self):
+    async def ais_usable(self):
         if self.connection is None:
             return False
         try:
@@ -357,15 +357,15 @@ class AsyncDatabaseWrapper(BaseAsyncDatabaseWrapper):
         else:
             return True
 
-    async def close_if_health_check_failed(self):
+    async def aclose_if_health_check_failed(self):
         if self.pool:
             # The pool only returns healthy connections.
             return None
-        return await super().close_if_health_check_failed()
+        return await super().aclose_if_health_check_failed()
 
     async def pg_version(self):
         if self._pg_version is None:
-            async with self.temporary_connection():
+            async with self.atemporary_connection():
                 self._pg_version = self.connection.info.server_version
 
         return self._pg_version

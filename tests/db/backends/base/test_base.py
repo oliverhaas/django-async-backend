@@ -43,13 +43,13 @@ async def test_get_database_version_not_implemented():
     with patch.object(BaseAsyncDatabaseWrapper, "__init__", return_value=None):
         msg = "subclasses of BaseAsyncDatabaseWrapper may require a get_database_version."
         with pytest.raises(NotImplementedError, match=msg):
-            await BaseAsyncDatabaseWrapper().get_database_version()
+            await BaseAsyncDatabaseWrapper().aget_database_version()
 
 
 async def test_check_database_version_supported_with_none_as_database_version(async_db):
     connection = async_connections[DEFAULT_DB_ALIAS]
     with patch.object(connection.features, "minimum_database_version", None):
-        await connection.check_database_version_supported()
+        await connection.acheck_database_version_supported()
 
 
 async def test_release_memory_without_garbage_collection(async_db):
@@ -63,7 +63,7 @@ async def test_release_memory_without_garbage_collection(async_db):
         with test_connection.wrap_database_errors:
             assert test_connection.queries == []
 
-        await test_connection.close()
+        await test_connection.aclose()
         test_connection = None
 
         gc.collect()
@@ -130,7 +130,7 @@ def _mock_wrapper():
 async def _call_execute(connection, params=None):
     ret_val = "1" if params is None else "%s"
     sql = "SELECT " + ret_val + connection.features.bare_select_suffix
-    async with await connection.cursor() as cursor:
+    async with await connection.acursor() as cursor:
         await cursor.execute(sql, params)
 
 
@@ -138,7 +138,7 @@ async def _call_executemany(connection, params=None):
     sql = "DELETE FROM reporter_table_tmp WHERE 0=1 AND 0=%s"
     if params is None:
         params = [(i,) for i in range(3)]
-    async with await connection.cursor() as cursor:
+    async with await connection.acursor() as cursor:
         await cursor.executemany(sql, params)
 
 
@@ -172,7 +172,7 @@ async def test_database_queried(async_db):
     connection = async_connections[DEFAULT_DB_ALIAS]
     wrapper = _mock_wrapper()
     with connection.execute_wrapper(wrapper):
-        async with await connection.cursor() as cursor:
+        async with await connection.acursor() as cursor:
             sql = "SELECT 17" + connection.features.bare_select_suffix
             await cursor.execute(sql)
             seventeen = await cursor.fetchall()
@@ -206,7 +206,7 @@ async def test_outer_wrapper_blocks(async_db):
         connection.execute_wrapper(blocker),
         connection.execute_wrapper(wrapper),
     ):
-        async with await connection.cursor() as cursor:
+        async with await connection.acursor() as cursor:
             await cursor.execute("The database never sees this")
             assert wrapper.call_count == 1
             await cursor.executemany("The database never sees this %s", [("either",)])
@@ -225,7 +225,7 @@ async def test_outer_async_wrapper_blocks(async_db):
         connection.execute_wrapper(blocker),
         connection.execute_wrapper(wrapper),
     ):
-        async with await connection.cursor() as cursor:
+        async with await connection.acursor() as cursor:
             await cursor.execute("The database never sees this")
             assert wrapper.call_count == 1
             await cursor.executemany("The database never sees this %s", [("either",)])
@@ -237,7 +237,7 @@ async def test_wrapper_gets_sql(async_db):
     wrapper = _mock_wrapper()
     sql = "SELECT 'aloha'" + connection.features.bare_select_suffix
     with connection.execute_wrapper(wrapper):
-        async with await connection.cursor() as cursor:
+        async with await connection.acursor() as cursor:
             await cursor.execute(sql)
     (_, reported_sql, _, _, _), _ = wrapper.call_args
     assert reported_sql == sql
@@ -278,9 +278,9 @@ async def closed_default_connection():
     """Health check tests need a clean closed connection without the
     async_db transaction wrapper, since they assert connection.connection is None."""
     connection = async_connections[DEFAULT_DB_ALIAS]
-    await connection.close()
+    await connection.aclose()
     yield connection
-    await connection.close()
+    await connection.aclose()
 
 
 def _patch_settings_dict(connection, conn_health_checks):
@@ -297,7 +297,7 @@ def _patch_settings_dict(connection, conn_health_checks):
 
 
 async def _run_query(connection):
-    async with await connection.cursor() as cursor:
+    async with await connection.acursor() as cursor:
         await cursor.execute("SELECT 42" + connection.features.bare_select_suffix)
 
 
@@ -306,14 +306,14 @@ async def test_health_checks_enabled(closed_default_connection):
     patcher = _patch_settings_dict(connection, conn_health_checks=True)
     try:
         assert connection.connection is None
-        with patch.object(connection, "is_usable", side_effect=AssertionError):
+        with patch.object(connection, "ais_usable", side_effect=AssertionError):
             await _run_query(connection)
 
         old_connection = connection.connection
-        await connection.close_if_unusable_or_obsolete()
+        await connection.aclose_if_unusable_or_obsolete()
         assert old_connection is connection.connection
 
-        with patch.object(connection, "is_usable", return_value=False) as mocked_is_usable:
+        with patch.object(connection, "ais_usable", return_value=False) as mocked_is_usable:
             await _run_query(connection)
             new_connection = connection.connection
             assert new_connection is not old_connection
@@ -321,7 +321,7 @@ async def test_health_checks_enabled(closed_default_connection):
             assert new_connection is connection.connection
         assert mocked_is_usable.call_count == 1
 
-        await connection.close_if_unusable_or_obsolete()
+        await connection.aclose_if_unusable_or_obsolete()
         await _run_query(connection)
         await _run_query(connection)
         assert new_connection is connection.connection
@@ -334,15 +334,15 @@ async def test_health_checks_enabled_errors_occurred(closed_default_connection):
     patcher = _patch_settings_dict(connection, conn_health_checks=True)
     try:
         assert connection.connection is None
-        with patch.object(connection, "is_usable", side_effect=AssertionError):
+        with patch.object(connection, "ais_usable", side_effect=AssertionError):
             await _run_query(connection)
 
         old_connection = connection.connection
         connection.errors_occurred = True
-        await connection.close_if_unusable_or_obsolete()
+        await connection.aclose_if_unusable_or_obsolete()
         assert old_connection is connection.connection
 
-        with patch.object(connection, "is_usable", side_effect=AssertionError):
+        with patch.object(connection, "ais_usable", side_effect=AssertionError):
             await _run_query(connection)
     finally:
         patcher.stop()
@@ -353,14 +353,14 @@ async def test_health_checks_disabled(closed_default_connection):
     patcher = _patch_settings_dict(connection, conn_health_checks=False)
     try:
         assert connection.connection is None
-        with patch.object(connection, "is_usable", side_effect=AssertionError):
+        with patch.object(connection, "ais_usable", side_effect=AssertionError):
             await _run_query(connection)
 
         old_connection = connection.connection
-        await connection.close_if_unusable_or_obsolete()
+        await connection.aclose_if_unusable_or_obsolete()
         assert old_connection is connection.connection
 
-        with patch.object(connection, "is_usable", side_effect=AssertionError):
+        with patch.object(connection, "ais_usable", side_effect=AssertionError):
             await _run_query(connection)
             assert old_connection is connection.connection
             await _run_query(connection)
@@ -374,31 +374,31 @@ async def test_set_autocommit_health_checks_enabled(closed_default_connection):
     patcher = _patch_settings_dict(connection, conn_health_checks=True)
     try:
         assert connection.connection is None
-        with patch.object(connection, "is_usable", side_effect=AssertionError):
-            await connection.set_autocommit(False)
+        with patch.object(connection, "ais_usable", side_effect=AssertionError):
+            await connection.aset_autocommit(False)
             await _run_query(connection)
-            await connection.commit()
-            await connection.set_autocommit(True)
+            await connection.acommit()
+            await connection.aset_autocommit(True)
 
         old_connection = connection.connection
-        await connection.close_if_unusable_or_obsolete()
+        await connection.aclose_if_unusable_or_obsolete()
         assert old_connection is connection.connection
 
-        with patch.object(connection, "is_usable", return_value=False) as mocked_is_usable:
-            await connection.set_autocommit(False)
+        with patch.object(connection, "ais_usable", return_value=False) as mocked_is_usable:
+            await connection.aset_autocommit(False)
             new_connection = connection.connection
             assert new_connection is not old_connection
             await _run_query(connection)
-            await connection.commit()
-            await connection.set_autocommit(True)
+            await connection.acommit()
+            await connection.aset_autocommit(True)
             assert new_connection is connection.connection
         assert mocked_is_usable.call_count == 1
 
-        await connection.close_if_unusable_or_obsolete()
-        await connection.set_autocommit(False)
+        await connection.aclose_if_unusable_or_obsolete()
+        await connection.aset_autocommit(False)
         await _run_query(connection)
-        await connection.commit()
-        await connection.set_autocommit(True)
+        await connection.acommit()
+        await connection.aset_autocommit(True)
         assert new_connection is connection.connection
     finally:
         patcher.stop()
@@ -409,12 +409,12 @@ async def test_set_autocommit_health_checks_enabled(closed_default_connection):
 
 @pytest.mark.parametrize("db", ["default", "other"])
 async def test_multi_database_init_connection_state_called_once(async_db, db):
-    with patch.object(async_connections[db], "commit", return_value=None):
+    with patch.object(async_connections[db], "acommit", return_value=None):
         with patch.object(
             async_connections[db],
-            "check_database_version_supported",
+            "acheck_database_version_supported",
         ) as mocked_version_check:
-            await async_connections[db].init_connection_state()
+            await async_connections[db].ainit_connection_state()
             after_first_calls = len(mocked_version_check.mock_calls)
-            await async_connections[db].init_connection_state()
+            await async_connections[db].ainit_connection_state()
             assert len(mocked_version_check.mock_calls) == after_first_calls

@@ -51,7 +51,7 @@ async def reporter_table_transaction():
         yield
     finally:
         await truncate_reporter_table()
-        await async_connections["default"].close()
+        await async_connections["default"].aclose()
 
 
 @pytest.fixture
@@ -78,4 +78,4 @@ async def async_db():
         connection = async_connections[name]
         connection.set_rollback(True)
         await atomic_cms[name].__aexit__(None, None, None)
-        await connection.close()
+        await connection.aclose()
