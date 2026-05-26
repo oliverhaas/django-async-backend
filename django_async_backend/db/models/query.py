@@ -965,35 +965,6 @@ class QuerySet(DjangoQuerySet):
         )
         return clone
 
-    def complex_filter(self, filter_obj):
-        """
-        Return a new QuerySet instance with filter_obj added to the filters.
-
-        filter_obj can be a Q object or a dictionary of keyword lookup
-        arguments.
-
-        This exists to support framework features such as 'limit_choices_to',
-        and usually it will be more natural to use other methods.
-        """
-        if isinstance(filter_obj, Q):
-            clone = self._chain()
-            clone.query.add_q(filter_obj)
-            return clone
-        return self._filter_or_exclude(False, args=(), kwargs=filter_obj)
-
-    def union(self, *other_qs, all=False):
-        # If the query is an EmptyQuerySet, combine all nonempty querysets.
-        if isinstance(self, EmptyQuerySet):
-            qs = [q for q in other_qs if not isinstance(q, EmptyQuerySet)]
-            if not qs:
-                return self
-            if len(qs) == 1:
-                return qs[0]
-            return qs[0]._combinator_query("union", *qs[1:], all=all)
-        if not other_qs:
-            return self
-        return self._combinator_query("union", *other_qs, all=all)
-
     def prefetch_related(self, *lookups):
         """
         Return a new QuerySet instance that will prefetch the specified
@@ -1213,18 +1184,6 @@ class QuerySet(DjangoQuerySet):
             self._result_cache = list([i async for i in self._iterable_class(self)])
         if self._prefetch_related_lookups and not self._prefetch_done:
             await self._aprefetch_related_objects()
-
-    def _check_ordering_first_last_queryset_aggregation(self, method):
-        if (
-            isinstance(self.query.group_by, tuple)
-            # Raise if the pk fields are not in the group_by.
-            and self.model._meta.pk not in {col.output_field for col in self.query.group_by}
-            and set(self.model._meta.pk_fields).difference({col.target for col in self.query.group_by})
-        ):
-            raise TypeError(
-                f"Cannot use QuerySet.{method}() on an unordered queryset performing "
-                f"aggregation. Add an ordering with order_by().",
-            )
 
 
 class InstanceCheckMeta(type):
