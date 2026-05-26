@@ -17,6 +17,7 @@ from django.db.models import query_utils, signals
 from django.db.models.deletion import (
     CASCADE,
     DO_NOTHING,
+    Collector,
     ProtectedError,
     RestrictedError,
     get_candidate_relations_to_delete,
@@ -28,7 +29,7 @@ from django_async_backend.db.transaction import (
 )
 
 
-class AsyncCollector:
+class AsyncCollector(Collector):
     """
     Async version of Django's Collector for cascade deletes.
 
@@ -96,17 +97,6 @@ class AsyncCollector:
         if reverse_dependency:
             model, dependency = dependency, model
         self.dependencies[model._meta.concrete_model].add(dependency._meta.concrete_model)
-
-    def add_field_update(self, field, value, objs):
-        self.field_updates[(field, value)].append(objs)
-
-    def add_restricted_objects(self, field, objs):
-        if objs:
-            model = objs[0].__class__
-            self.restricted_objects[model][field].update(objs)
-
-    def _has_signal_listeners(self, model):
-        return signals.pre_delete.has_listeners(model) or signals.post_delete.has_listeners(model)
 
     def can_fast_delete(self, objs, from_field=None):
         if from_field and from_field.remote_field.on_delete is not CASCADE:
@@ -365,11 +355,6 @@ class AsyncCollector:
             if not found:
                 return
         self.data = defaultdict(set, {model: self.data[model] for model in sorted_models})
-
-    def instances_with_model(self):
-        for model, instances in self.data.items():
-            for obj in instances:
-                yield model, obj
 
     async def adelete(self):
         """
