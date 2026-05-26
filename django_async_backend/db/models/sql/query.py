@@ -470,7 +470,7 @@ class Query(DjangoQuery):
         outer_query.select_for_update = False
         outer_query.select_related = False
         compiler = outer_query.get_compiler(using, elide_empty=elide_empty)
-        result = await compiler.execute_sql(SINGLE)
+        result = await compiler.aexecute_sql(SINGLE)
         if result is None:
             result = empty_set_result
         else:
@@ -490,10 +490,10 @@ class Query(DjangoQuery):
         obj = self.clone()
         return (await obj.get_aggregation(using, {"__count": Count("*")}))["__count"]
 
-    async def has_results(self, using):
+    async def ahas_results(self, using):
         q = self.exists()
         compiler = q.get_compiler(using=using)
-        return await compiler.has_results()
+        return await compiler.ahas_results()
 
     async def explain(self, using, format=None, **options):
         q = self.clone()
@@ -502,7 +502,7 @@ class Query(DjangoQuery):
                 raise ValueError(f"Invalid option name: {option_name!r}.")
         q.explain_info = ExplainInfo(format, options)
         compiler = q.get_compiler(using=using)
-        return "\n".join([i async for i in compiler.explain_query()])
+        return "\n".join([i async for i in compiler.aexplain_query()])
 
     def check_alias(self, alias):
         # RemovedInDjango70Warning: When the deprecation ends, remove.

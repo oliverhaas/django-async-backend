@@ -105,7 +105,7 @@ class ModelIterable(DjangoModelIterable):
         compiler = queryset.query.get_compiler(using=db)
         # Execute the query. This will also fill compiler.select, klass_info,
         # and annotations.
-        results = await compiler.execute_sql(chunked_fetch=self.chunked_fetch, chunk_size=self.chunk_size)
+        results = await compiler.aexecute_sql(chunked_fetch=self.chunked_fetch, chunk_size=self.chunk_size)
         select, klass_info, annotation_col_map = (
             compiler.select,
             compiler.klass_info,
@@ -132,7 +132,7 @@ class ModelIterable(DjangoModelIterable):
             )
             for field, related_objs in queryset._known_related_objects.items()
         ]
-        for row in await compiler.results_iter(results):
+        for row in await compiler.aresults_iter(results):
             obj = model_cls.from_db(db, init_list, row[model_fields_start:model_fields_end])
             for rel_populator in related_populators:
                 rel_populator.populate(row, obj)
@@ -217,7 +217,7 @@ class ValuesIterable(DjangoValuesIterable):
                 *query.annotation_select,
             ]
         indexes = range(len(names))
-        for row in await compiler.results_iter(chunked_fetch=self.chunked_fetch, chunk_size=self.chunk_size):
+        for row in await compiler.aresults_iter(chunked_fetch=self.chunked_fetch, chunk_size=self.chunk_size):
             yield {names[i]: row[i] for i in indexes}
 
 
@@ -232,7 +232,7 @@ class ValuesListIterable(DjangoValuesListIterable):
         query = queryset.query
         compiler = query.get_compiler(queryset.db)
 
-        for i in await compiler.results_iter(
+        for i in await compiler.aresults_iter(
             tuple_expected=True,
             chunked_fetch=self.chunked_fetch,
             chunk_size=self.chunk_size,
@@ -272,7 +272,7 @@ class FlatValuesListIterable(DjangoFlatValuesListIterable):
     async def __aiter__(self):
         queryset = self.queryset
         compiler = queryset.query.get_compiler(queryset.db)
-        for row in await compiler.results_iter(chunked_fetch=self.chunked_fetch, chunk_size=self.chunk_size):
+        for row in await compiler.aresults_iter(chunked_fetch=self.chunked_fetch, chunk_size=self.chunk_size):
             yield row[0]
 
 
@@ -608,7 +608,7 @@ class QuerySet(DjangoQuerySet):
         query.__class__ = sql.DeleteQuery
         connection = async_connections[using]
         compiler = connection.ops.compiler(query.compiler)(query, connection, using)
-        return await compiler.execute_sql(ROW_COUNT)
+        return await compiler.aexecute_sql(ROW_COUNT)
 
     _raw_delete.alters_data = True
 
@@ -629,8 +629,8 @@ class QuerySet(DjangoQuerySet):
         connection = async_connections[self.db]
         compiler = connection.ops.compiler(query.compiler)(query, connection, self.db)
         if returning_fields is None:
-            return await compiler.execute_sql(ROW_COUNT)
-        return await compiler.execute_returning_sql(returning_fields)
+            return await compiler.aexecute_sql(ROW_COUNT)
+        return await compiler.aexecute_returning_sql(returning_fields)
 
     _update.alters_data = True
     _update.queryset_only = False
@@ -673,7 +673,7 @@ class QuerySet(DjangoQuerySet):
         connection = async_connections[self.db]
         compiler = connection.ops.compiler(query.compiler)(query, connection, self.db)
         async with async_mark_for_rollback_on_error(using=self.db):
-            rows = await compiler.execute_sql(ROW_COUNT)
+            rows = await compiler.aexecute_sql(ROW_COUNT)
         self._result_cache = None
         return rows
 
@@ -852,7 +852,7 @@ class QuerySet(DjangoQuerySet):
         Return True if the QuerySet would have any results, False otherwise.
         """
         if self._result_cache is None:
-            return await self.query.has_results(using=self.db)
+            return await self.query.ahas_results(using=self.db)
         return bool(self._result_cache)
 
     async def _aprefetch_related_objects(self):
@@ -1030,7 +1030,7 @@ class QuerySet(DjangoQuerySet):
         query.insert_values(fields, objs, raw=raw)
         connection = async_connections[using]
         compiler = connection.ops.compiler(query.compiler)(query, connection, using)
-        return await compiler.execute_sql(returning_fields)
+        return await compiler.aexecute_sql(returning_fields)
 
     _insert.alters_data = True
     _insert.queryset_only = False
