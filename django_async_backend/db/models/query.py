@@ -34,7 +34,7 @@ from django.db.models.query import (
     FlatValuesListIterable as DjangoFlatValuesListIterable,
     ModelIterable as DjangoModelIterable,
     NamedValuesListIterable as DjangoNamedValuesListIterable,
-    Prefetch as DjangoPrefetch,
+    Prefetch,
     QuerySet as DjangoQuerySet,
     RawModelIterable as DjangoRawModelIterable,
     RawQuerySet as DjangoRawQuerySet,
@@ -1352,13 +1352,6 @@ class RawQuerySet:
             # (e.g. CompositePrimaryKey).
             if field.column
         }
-
-
-# Re-export Django's Prefetch unchanged. Our previous local class was a
-# clone with AST-equivalent methods, which caused isinstance(djangoPrefetch,
-# OurPrefetch) to be False and silently broke prefetch_related() when
-# callers imported Prefetch from django.db.models.
-Prefetch = DjangoPrefetch
 
 
 def normalize_prefetch_lookups(lookups, prefix=None):
