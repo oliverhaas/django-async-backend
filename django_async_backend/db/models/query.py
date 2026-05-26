@@ -1168,10 +1168,15 @@ class QuerySet(DjangoQuerySet):
             await self._aprefetch_related_objects()
 
 
-class RawQuerySet:
+class RawQuerySet(DjangoRawQuerySet):
     """
-    Provide an iterator which converts the results of raw SQL queries into
-    annotated model instances.
+    Async-aware RawQuerySet. Sync iteration and helpers inherit from Django.
+    Overrides:
+    - __init__: substitutes our async_sql.RawQuery for the underlying query
+      so async cursor execution goes through our async compiler.
+    - resolve_model_init_order: same logic as Django's but uses our
+      async_connections registry (also used by aresolve_model_init_order).
+    - __aiter__: dispatches via our _afetch_all instead of sync_to_async.
     """
 
     def __init__(
@@ -1184,16 +1189,21 @@ class RawQuerySet:
         using=None,
         hints=None,
     ):
-        self.raw_query = raw_query
-        self.model = model
-        self._db = using
-        self._hints = hints or {}
-        self.query = query or async_sql.RawQuery(sql=raw_query, using=self.db, params=params)
-        self.params = params
-        self.translations = translations or {}
-        self._result_cache = None
-        self._prefetch_related_lookups = ()
-        self._prefetch_done = False
+        if query is None:
+            query = async_sql.RawQuery(
+                sql=raw_query,
+                using=using or router.db_for_read(model, **(hints or {})),
+                params=params,
+            )
+        super().__init__(
+            raw_query=raw_query,
+            model=model,
+            query=query,
+            params=params,
+            translations=translations,
+            using=using,
+            hints=hints,
+        )
 
     def resolve_model_init_order(self):
         """Resolve the init field names and value positions."""
@@ -1228,51 +1238,6 @@ class RawQuerySet:
                 columns[index] = model_name
         return columns
 
-    def prefetch_related(self, *lookups):
-        """Same as QuerySet.prefetch_related()"""
-        clone = self._clone()
-        if lookups == (None,):
-            clone._prefetch_related_lookups = ()
-        else:
-            clone._prefetch_related_lookups = clone._prefetch_related_lookups + lookups
-        return clone
-
-    def _prefetch_related_objects(self):
-        prefetch_related_objects(self._result_cache, *self._prefetch_related_lookups)
-        self._prefetch_done = True
-
-    def _clone(self):
-        """Same as QuerySet._clone()"""
-        c = self.__class__(
-            self.raw_query,
-            model=self.model,
-            query=self.query,
-            params=self.params,
-            translations=self.translations,
-            using=self._db,
-            hints=self._hints,
-        )
-        c._prefetch_related_lookups = self._prefetch_related_lookups[:]
-        return c
-
-    def _fetch_all(self):
-        if self._result_cache is None:
-            self._result_cache = list(self.iterator())
-        if self._prefetch_related_lookups and not self._prefetch_done:
-            self._prefetch_related_objects()
-
-    def __len__(self):
-        self._fetch_all()
-        return len(self._result_cache)
-
-    def __bool__(self):
-        self._fetch_all()
-        return bool(self._result_cache)
-
-    def __iter__(self):
-        self._fetch_all()
-        return iter(self._result_cache)
-
     def __aiter__(self):
         async def generator():
             await self._afetch_all()
@@ -1285,62 +1250,10 @@ class RawQuerySet:
         if self._result_cache is None:
             self._result_cache = [obj async for obj in RawModelIterable(self)]
         if self._prefetch_related_lookups and not self._prefetch_done:
+            # NOTE: this calls Django's sync prefetch_related_objects (inherited).
+            # Our module's prefetch_related_objects is async but is not awaited
+            # here; this is a latent pre-existing bug. See followup.
             self._prefetch_related_objects()
-
-    def iterator(self):
-        yield from RawModelIterable(self)
-
-    def __repr__(self):
-        return "<%s: %s>" % (self.__class__.__name__, self.query)
-
-    def __getitem__(self, k):
-        return list(self)[k]
-
-    @property
-    def db(self):
-        """Return the database used if this query is executed now."""
-        return self._db or router.db_for_read(self.model, **self._hints)
-
-    def using(self, alias):
-        """Select the database this RawQuerySet should execute against."""
-        return RawQuerySet(
-            self.raw_query,
-            model=self.model,
-            query=self.query.chain(using=alias),
-            params=self.params,
-            translations=self.translations,
-            using=alias,
-        )
-
-    @cached_property
-    def columns(self):
-        """
-        A list of model field names in the order they'll appear in the
-        query results.
-        """
-        columns = self.query.get_columns()
-        # Adjust any column names which don't match field names
-        for query_name, model_name in self.translations.items():
-            # Ignore translations for nonexistent column names
-            try:
-                index = columns.index(query_name)
-            except ValueError:
-                pass
-            else:
-                columns[index] = model_name
-        return columns
-
-    @cached_property
-    def model_fields(self):
-        """A dict mapping column names to model field names."""
-        converter = async_connections[self.db].introspection.identifier_converter
-        return {
-            converter(field.column): field
-            for field in self.model._meta.fields
-            # Fields with None "column" should be ignored
-            # (e.g. CompositePrimaryKey).
-            if field.column
-        }
 
 
 def normalize_prefetch_lookups(lookups, prefix=None):
