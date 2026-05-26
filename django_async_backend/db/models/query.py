@@ -34,6 +34,7 @@ from django.db.models.query import (
     FlatValuesListIterable as DjangoFlatValuesListIterable,
     ModelIterable as DjangoModelIterable,
     NamedValuesListIterable as DjangoNamedValuesListIterable,
+    Prefetch as DjangoPrefetch,
     QuerySet as DjangoQuerySet,
     RawModelIterable as DjangoRawModelIterable,
     RawQuerySet as DjangoRawQuerySet,
@@ -965,29 +966,6 @@ class QuerySet(DjangoQuerySet):
         )
         return clone
 
-    def prefetch_related(self, *lookups):
-        """
-        Return a new QuerySet instance that will prefetch the specified
-        Many-To-One and Many-To-Many related objects when the QuerySet is
-        evaluated.
-
-        When prefetch_related(None) is called, clear the list of prefetch
-        lookups.
-        """
-        self._not_support_combined_queries("prefetch_related")
-        clone = self._chain()
-        if lookups == (None,):
-            clone._prefetch_related_lookups = ()
-        else:
-            for lookup in lookups:
-                if isinstance(lookup, Prefetch):
-                    lookup = lookup.prefetch_to
-                    lookup = lookup.split(LOOKUP_SEP, 1)[0]
-                if lookup in self.query._filtered_relations:
-                    raise ValueError("prefetch_related() is not supported with FilteredRelation.")
-            clone._prefetch_related_lookups = clone._prefetch_related_lookups + lookups
-        return clone
-
     @property
     def ordered(self):
         """
@@ -1376,58 +1354,11 @@ class RawQuerySet:
         }
 
 
-class Prefetch:
-    def __init__(self, lookup, queryset=None, to_attr=None):
-        # `prefetch_through` is the path we traverse to perform the prefetch.
-        self.prefetch_through = lookup
-        # `prefetch_to` is the path to the attribute that stores the result.
-        self.prefetch_to = lookup
-        if queryset is not None and (
-            isinstance(queryset, RawQuerySet)
-            or (hasattr(queryset, "_iterable_class") and not issubclass(queryset._iterable_class, ModelIterable))
-        ):
-            raise ValueError("Prefetch querysets cannot use raw(), values(), and values_list().")
-        if to_attr:
-            self.prefetch_to = LOOKUP_SEP.join(lookup.split(LOOKUP_SEP)[:-1] + [to_attr])
-
-        self.queryset = queryset
-        self.to_attr = to_attr
-
-    def __getstate__(self):
-        obj_dict = self.__dict__.copy()
-        if self.queryset is not None:
-            queryset = self.queryset._chain()
-            # Prevent the QuerySet from being evaluated
-            queryset._result_cache = []
-            queryset._prefetch_done = True
-            obj_dict["queryset"] = queryset
-        return obj_dict
-
-    def add_prefix(self, prefix):
-        self.prefetch_through = prefix + LOOKUP_SEP + self.prefetch_through
-        self.prefetch_to = prefix + LOOKUP_SEP + self.prefetch_to
-
-    def get_current_prefetch_to(self, level):
-        return LOOKUP_SEP.join(self.prefetch_to.split(LOOKUP_SEP)[: level + 1])
-
-    def get_current_to_attr(self, level):
-        parts = self.prefetch_to.split(LOOKUP_SEP)
-        to_attr = parts[level]
-        as_attr = self.to_attr and level == len(parts) - 1
-        return to_attr, as_attr
-
-    def get_current_querysets(self, level):
-        if self.get_current_prefetch_to(level) == self.prefetch_to and self.queryset is not None:
-            return [self.queryset]
-        return None
-
-    def __eq__(self, other):
-        if not isinstance(other, Prefetch):
-            return NotImplemented
-        return self.prefetch_to == other.prefetch_to
-
-    def __hash__(self):
-        return hash((self.__class__, self.prefetch_to))
+# Re-export Django's Prefetch unchanged. Our previous local class was a
+# clone with AST-equivalent methods, which caused isinstance(djangoPrefetch,
+# OurPrefetch) to be False and silently broke prefetch_related() when
+# callers imported Prefetch from django.db.models.
+Prefetch = DjangoPrefetch
 
 
 def normalize_prefetch_lookups(lookups, prefix=None):
