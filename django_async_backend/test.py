@@ -1,17 +1,14 @@
 from django.core.signals import request_started
 from django.db import reset_queries
+from django.test.utils import CaptureQueriesContext
 
 
-class AsyncCaptureQueriesContext:
-    def __init__(self, connection):
-        self.connection = connection
+class AsyncCaptureQueriesContext(CaptureQueriesContext):
+    """Async-capable counterpart to Django's CaptureQueriesContext.
 
-    def __len__(self):
-        return len(self.captured_queries)
-
-    @property
-    def captured_queries(self):
-        return self.connection.queries[slice(self.initial_queries, self.final_queries)]
+    Inherits __init__, __iter__, __getitem__, __len__, and captured_queries
+    from Django; adds __aenter__ / __aexit__ for async usage.
+    """
 
     async def __aenter__(self):
         self.force_debug_cursor = self.connection.force_debug_cursor
