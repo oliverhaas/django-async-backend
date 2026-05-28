@@ -9,7 +9,6 @@ from django.db.models.query import QuerySet as DjangoQuerySet
 
 from django_async_backend.db.models import (
     AsyncManager,
-    AsyncModelMixin,
     Manager,
     Model,
     QuerySet,
@@ -27,11 +26,13 @@ def test_manager_subclasses_base_manager_and_wires_our_queryset():
     assert Manager._queryset_class is QuerySet
 
 
-def test_model_includes_async_mixin_and_django_model():
+def test_model_subclasses_django_model_with_async_api():
     import django.db.models
 
-    assert issubclass(Model, AsyncModelMixin)
     assert issubclass(Model, django.db.models.Model)
+    assert hasattr(Model, "asave")
+    assert hasattr(Model, "adelete")
+    assert hasattr(Model, "arefresh_from_db")
 
 
 def test_backward_compat_aliases():

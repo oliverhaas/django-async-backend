@@ -1,10 +1,10 @@
 from django.db import models
 
-from django_async_backend.db.models.base import AsyncModelMixin
+from django_async_backend.db.models import Model
 from django_async_backend.db.models.manager import AsyncManager
 
 
-class AbstractBaseModel(AsyncModelMixin, models.Model):
+class AbstractBaseModel(Model):
     name = models.CharField(max_length=255, unique=True)
     value = models.IntegerField(null=True)
 
@@ -38,7 +38,7 @@ class GetLatestByModel(AbstractBaseModel):
 # ── Models for testing on_delete behaviors ──────────────────────────────
 
 
-class Author(AsyncModelMixin, models.Model):
+class Author(Model):
     name = models.CharField(max_length=255)
 
     async_object = AsyncManager()
@@ -47,7 +47,7 @@ class Author(AsyncModelMixin, models.Model):
         db_table = "test_author"
 
 
-class Book(AsyncModelMixin, models.Model):
+class Book(Model):
     title = models.CharField(max_length=255)
     author = models.ForeignKey(Author, on_delete=models.CASCADE, related_name="books")
 
@@ -57,7 +57,7 @@ class Book(AsyncModelMixin, models.Model):
         db_table = "test_book"
 
 
-class Review(AsyncModelMixin, models.Model):
+class Review(Model):
     """CASCADE chain: Author → Book → Review"""
 
     text = models.CharField(max_length=255)
@@ -69,7 +69,7 @@ class Review(AsyncModelMixin, models.Model):
         db_table = "test_review"
 
 
-class EditorNote(AsyncModelMixin, models.Model):
+class EditorNote(Model):
     """SET_NULL: when book is deleted, editor_note.book becomes NULL"""
 
     note = models.CharField(max_length=255)
@@ -81,7 +81,7 @@ class EditorNote(AsyncModelMixin, models.Model):
         db_table = "test_editor_note"
 
 
-class ProtectedComment(AsyncModelMixin, models.Model):
+class ProtectedComment(Model):
     """PROTECT: cannot delete book if it has protected comments"""
 
     text = models.CharField(max_length=255)
@@ -93,7 +93,7 @@ class ProtectedComment(AsyncModelMixin, models.Model):
         db_table = "test_protected_comment"
 
 
-class RestrictedTag(AsyncModelMixin, models.Model):
+class RestrictedTag(Model):
     """RESTRICT: like PROTECT but allows deletion if tag is also being deleted"""
 
     label = models.CharField(max_length=255)
@@ -105,7 +105,7 @@ class RestrictedTag(AsyncModelMixin, models.Model):
         db_table = "test_restricted_tag"
 
 
-class Event(AsyncModelMixin, models.Model):
+class Event(Model):
     """Model with date/datetime fields for dates()/datetimes() tests."""
 
     title = models.CharField(max_length=255)
@@ -118,7 +118,7 @@ class Event(AsyncModelMixin, models.Model):
         db_table = "test_event"
 
 
-class Reporter(AsyncModelMixin, models.Model):
+class Reporter(Model):
     """Used by backend and transaction tests that need to observe real
     BEGIN/COMMIT/ROLLBACK on a table independent of any test transaction."""
 

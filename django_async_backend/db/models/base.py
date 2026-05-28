@@ -1,17 +1,10 @@
 """
 Base Model class for async backend.
 
-Usage (preferred):
+Usage:
     from django_async_backend.db.models import Model
 
     class MyModel(Model):
-        name = models.CharField(max_length=100)
-
-Usage (legacy mixin, still supported):
-    from django.db import models
-    from django_async_backend.db.models.base import AsyncModelMixin
-
-    class MyModel(AsyncModelMixin, models.Model):
         name = models.CharField(max_length=100)
 
 Signals:
@@ -25,7 +18,7 @@ from functools import partialmethod
 import django.db.models
 from django.db import connections, router
 from django.db.models import DateField, DateTimeField, Q
-from django.db.models.signals import class_prepared, pre_save, post_save
+from django.db.models.signals import class_prepared, post_save, pre_save
 
 from django_async_backend.db.transaction import (
     aatomic,
@@ -33,41 +26,35 @@ from django_async_backend.db.transaction import (
 )
 
 
-def _register_async_date_accessors(sender, **kwargs):
-    """Attach aget_next_by_FOO / aget_previous_by_FOO for each non-null date field."""
-    if not issubclass(sender, AsyncModelMixin):
-        return
-    for field in sender._meta.local_fields:
-        if isinstance(field, (DateField, DateTimeField)) and not field.null:
-            setattr(
-                sender,
-                "aget_next_by_%s" % field.name,
-                partialmethod(sender._aget_next_or_previous_by_FIELD, field=field, is_next=True),
-            )
-            setattr(
-                sender,
-                "aget_previous_by_%s" % field.name,
-                partialmethod(sender._aget_next_or_previous_by_FIELD, field=field, is_next=False),
-            )
+class Model(django.db.models.Model):
+    """Base class for async-backend models.
 
+    Adds truly async asave()/adelete()/arefresh_from_db()/aget_next_by_FIELD
+    alongside Django's sync API. The default `objects` manager exposes both
+    Django's sync API and our async API on the same QuerySet, so no
+    `async_object = Manager()` boilerplate is needed on subclasses.
 
-class_prepared.connect(_register_async_date_accessors)
-
-
-class AsyncModelMixin:
-    """Mixin that adds truly async asave() and adelete() to Django models.
-
-    Prefer subclassing Model (which combines this mixin with django.db.models.Model)
-    for new code. This mixin remains for legacy use with explicit
-    multiple inheritance: class MyModel(AsyncModelMixin, models.Model).
+    Subclass directly:
+        class MyModel(Model):
+            name = models.CharField(max_length=100)
     """
+
+    # Import here to avoid a cycle: manager imports query, query imports
+    # this package's sql sub-package, and the package __init__ pulls in
+    # base. Local import keeps base.py independent of manager.py at load.
+    from django_async_backend.db.models.manager import Manager as _Manager
+
+    objects = _Manager()
+
+    class Meta:
+        abstract = True
 
     def __init_subclass__(cls, async_mro_strict=True, **kwargs):
         super().__init_subclass__(**kwargs)
         if not async_mro_strict:
             return
         for klass in cls.__mro__:
-            if klass is AsyncModelMixin:
+            if klass is Model:
                 break
             if "save" in klass.__dict__ and "asave" not in klass.__dict__:
                 raise TypeError(
@@ -482,26 +469,26 @@ class AsyncModelMixin:
         self._state.db = db_instance._state.db
 
 
-class Model(AsyncModelMixin, django.db.models.Model):
-    """Base class for async-backend models.
+def _register_async_date_accessors(sender, **kwargs):
+    """Attach aget_next_by_FOO / aget_previous_by_FOO for each non-null date field."""
+    if not issubclass(sender, Model):
+        return
+    for field in sender._meta.local_fields:
+        if isinstance(field, (DateField, DateTimeField)) and not field.null:
+            setattr(
+                sender,
+                "aget_next_by_%s" % field.name,
+                partialmethod(sender._aget_next_or_previous_by_FIELD, field=field, is_next=True),
+            )
+            setattr(
+                sender,
+                "aget_previous_by_%s" % field.name,
+                partialmethod(sender._aget_next_or_previous_by_FIELD, field=field, is_next=False),
+            )
 
-    Subclass this for new code:
-        class MyModel(Model):
-            name = models.CharField(max_length=100)
 
-    Inherits AsyncModelMixin (asave/adelete/arefresh_from_db/aget_next_by_FIELD)
-    and django.db.models.Model in a single declaration. The default
-    `objects` manager exposes both Django's sync API and our async API on
-    the same QuerySet, so no `async_object = Manager()` boilerplate is
-    needed on subclasses.
-    """
-
-    # Import here to avoid a cycle: manager imports query, query imports
-    # this package's sql sub-package, and the package __init__ pulls in
-    # base. Local import keeps base.py independent of manager.py at load.
-    from django_async_backend.db.models.manager import Manager as _Manager
-
-    objects = _Manager()
-
-    class Meta:
-        abstract = True
+# Connected after Model is defined so the receiver can reference Model. Model
+# itself fires class_prepared during its own class statement (before the name
+# is bound); connecting here means that firing is skipped, which is fine since
+# the abstract base has no date fields.
+class_prepared.connect(_register_async_date_accessors)

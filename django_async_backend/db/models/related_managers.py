@@ -2,7 +2,7 @@
 Async related manager support for reverse FK and M2M relations.
 
 Adds aadd, aremove, aclear, aset, acreate, aget_or_create, aupdate_or_create
-to Django's dynamically created related managers for AsyncModelMixin subclasses.
+to Django's dynamically created related managers for async Model subclasses.
 """
 
 from django.db import router
@@ -439,7 +439,7 @@ def create_async_m2m_manager(superclass, rel, reverse):
 
 
 def register_async_related_managers(sender):
-    """Replace related_manager_cls on descriptors for AsyncModelMixin subclasses."""
+    """Replace related_manager_cls on descriptors for async Model subclasses."""
     from django.db.models.fields.related_descriptors import (
         ManyToManyDescriptor,
         ReverseManyToOneDescriptor,
